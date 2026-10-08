@@ -1,8 +1,8 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { JsonLd } from '@/components/site';
-import { CITIES, cityById } from '@/lib/cities';
-import { displayName, listBlogPosts, listEvents, listPosts, listProfiles, postHeadline } from '@/lib/data';
+import { CITIES } from '@/lib/cities';
+import { displayName, listBlogPosts, listEvents, listPosts, listProfiles, postHeadline, type PublicEvent, type PublicPost, type PublicProfile } from '@/lib/data';
 import { graph, toMetadata } from '@/lib/seo/engine';
 import { ANDROID_PLAY_STORE_URL, IOS_APP_STORE_URL } from '@/lib/site';
 
@@ -33,16 +33,28 @@ export const metadata: Metadata = toMetadata({
   type: 'website',
 });
 
+function when(iso: string) {
+  return new Date(iso).toLocaleString('tr-TR', { dateStyle: 'medium', timeStyle: 'short' });
+}
+
+function initial(name: string) {
+  return name.trim().slice(0, 1).toLocaleUpperCase('tr') || '·';
+}
+
 export default async function HomePage() {
-  const [posts, people, events, blogs] = await Promise.all([
-    listPosts({ limit: 4 }),
-    listProfiles(4),
-    listEvents({ limit: 4 }),
-    listBlogPosts('tr', 3),
-  ]);
-  const upcoming = events
-    .filter((event) => new Date(event.starts_at).getTime() >= Date.now())
-    .slice(0, 4);
+  const [people, blogs] = await Promise.all([listProfiles(80), listBlogPosts('tr', 3)]);
+  const boards = await Promise.all(
+    CITIES.map(async (city) => {
+      const [posts, events] = await Promise.all([
+        listPosts({ regionId: city.id, limit: 3 }),
+        listEvents({ regionId: city.id, limit: 3 }),
+      ]);
+      return { city, posts, events, locals: peopleSafe(people, city.id) };
+    }),
+  );
+  const ranked = [...boards].sort((a, b) => score(b) - score(a));
+  const activeId = ranked[0] && score(ranked[0]) > 0 ? ranked[0].city.id : 'trabzon';
+  const latest = boards.flatMap((board) => board.posts).sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
   const jsonLd = graph([
     {
       '@type': 'FAQPage',
@@ -58,137 +70,123 @@ export default async function HomePage() {
     <>
       <JsonLd data={jsonLd} />
       <section className="home-hero">
-        <div className="wrap">
-          <p className="kicker">Vora</p>
-          <h1>Karadeniz’in dijital şehir ağı</h1>
-          <p className="lead">Şehrindeki insanları, işletmeleri, etkinlikleri, fırsatları ve günlük yaşamı tek yerde keşfet.</p>
-          <div className="home-actions">
-            <Link className="btn" href="/explore">Vora’yı keşfet</Link>
-            <Link className="btn ghost" href="#sehirler">Şehrini seç</Link>
+        <div className="wrap home-hero-grid">
+          <div>
+            <p className="kicker">Vora</p>
+            <h1>Karadeniz’in dijital şehir ağı</h1>
+            <p className="lead">Şehrindeki insanları, işletmeleri, etkinlikleri, fırsatları ve günlük yaşamı tek yerde keşfet.</p>
+            <div className="home-actions">
+              <Link className="btn" href="/explore">Vora’yı keşfet</Link>
+              <Link className="btn ghost" href="#sehirler">Şehrini seç</Link>
+            </div>
           </div>
+          <aside className="live-card" aria-label="Son herkese açık paylaşım">
+            <p className="kicker">Ağda son kayıt</p>
+            {latest ? (
+              <Link href={`/p/${latest.id}`} className="live-link">
+                <strong>{postHeadline(latest)}</strong>
+                <span>
+                  {displayName(latest.author_name, latest.author_username)}
+                  {' · '}
+                  {cityName(latest.region_id)}
+                </span>
+              </Link>
+            ) : (
+              <p className="empty">Herkese açık paylaşım yok.</p>
+            )}
+          </aside>
         </div>
       </section>
 
       <section className="band" id="sehirler">
         <div className="wrap">
           <h2>Şehrini seç</h2>
-          <p className="lead">On sekiz Karadeniz ili. Her sayfa o ilin kendi metninden ve herkese açık kayıtlarından beslenir.</p>
-          <div className="city-grid">
-            {CITIES.map((city) => (
-              <Link key={city.id} href={`/city/${city.id}`} className="city-tile">
-                <strong>{city.name}</strong>
-                <span>{city.description}</span>
-              </Link>
+          <p className="lead">Bir ili seç. O şehirdeki herkese açık insanlar, paylaşımlar ve etkinlikler açılır.</p>
+          <div className="city-switch">
+            <div className="city-pick" role="radiogroup" aria-label="Şehir">
+              {boards.map((board) => (
+                <div key={board.city.id}>
+                  <input
+                    id={`city-${board.city.id}`}
+                    className="city-radio"
+                    type="radio"
+                    name="home-city"
+                    defaultChecked={board.city.id === activeId}
+                  />
+                  <label htmlFor={`city-${board.city.id}`}>
+                    {board.city.name}
+                    <span>{score(board)}</span>
+                  </label>
+                </div>
+              ))}
+            </div>
+            {boards.map((board) => (
+              <div key={board.city.id} className={`city-board board-${board.city.id}`}>
+                <div className="board-head">
+                  <h3>{board.city.name}</h3>
+                  <Link href={`/city/${board.city.id}`}>{board.city.name} sayfası</Link>
+                </div>
+                <div className="board-col">
+                  <h3>İnsanlar</h3>
+                  {board.locals.length === 0 ? <p className="empty">Herkese açık profil yok.</p> : board.locals.map((person) => (
+                    <Link key={person.id} href={`/u/${person.username}`} className="person-line">
+                      <span className="avatar">
+                        {person.avatar_url ? <img src={person.avatar_url} alt="" /> : initial(displayName(person.full_name, person.username))}
+                      </span>
+                      <span>
+                        <strong>{displayName(person.full_name, person.username)}</strong>
+                        <small>@{person.username}</small>
+                      </span>
+                    </Link>
+                  ))}
+                </div>
+                <div className="board-col">
+                  <h3>Paylaşımlar</h3>
+                  {board.posts.length === 0 ? <p className="empty">Herkese açık paylaşım yok.</p> : board.posts.map((post) => (
+                    <Link key={post.id} href={`/p/${post.id}`} className="post-line">
+                      {post.media_urls[0] ? <img src={post.media_urls[0]} alt="" /> : null}
+                      <span>
+                        <strong>{postHeadline(post)}</strong>
+                        <small>{displayName(post.author_name, post.author_username)}</small>
+                      </span>
+                    </Link>
+                  ))}
+                </div>
+                <div className="board-col">
+                  <h3>Etkinlikler</h3>
+                  {board.events.length === 0 ? <p className="empty">Yayında etkinlik yok.</p> : board.events.map((event) => (
+                    <Link key={event.id} href={`/events/${event.id}`} className="post-line">
+                      <span>
+                        <strong>{event.title}</strong>
+                        <small>{when(event.starts_at)}{event.location_name ? ` · ${event.location_name}` : ''}</small>
+                      </span>
+                    </Link>
+                  ))}
+                </div>
+              </div>
             ))}
           </div>
         </div>
       </section>
 
-      <section className="band" id="vora">
-        <div className="wrap split">
-          <div>
-            <h2>Vora nedir?</h2>
-            <p>Bir ilçe tanıtım sitesi değil. İnsan, etkinlik, hizmet ve paylaşım aynı şehir kimliği altında durur. Web bu ağın herkese açık yüzüdür; hesap, mesaj ve şehir odası uygulamada kalır.</p>
-            <p><Link href="/about">Platformun nasıl çalıştığını oku</Link></p>
-          </div>
-          <ul className="quiet-list">
-            <li><strong>Yerel odak</strong><span>İçerik bir ile bağlıdır. Genel bir akışın içine sıkışmaz.</span></li>
-            <li><strong>Gerçek hesaplar</strong><span>Listelenen profiller herkese açık kayıtlardır. Sayı uydurulmaz.</span></li>
-            <li><strong>Açık yüzey</strong><span>Kapalı paylaşım, taslak yazı ve özel oda bu sitede indexlenmez.</span></li>
-            <li><strong>Topluluk kuralları</strong><span>Platform 18 yaş ve üzeridir. Kurallar herkese aynı şekilde uygulanır.</span></li>
-          </ul>
-        </div>
-      </section>
-
-      <section className="band" id="etkinlikler">
-        <div className="wrap">
-          <h2>Yaklaşan etkinlikler</h2>
-          <p className="lead">Yayındaki herkese açık etkinlikler. Geçmiş kayıtlar silinmez, arşivde kalır.</p>
-          {upcoming.length === 0 ? <p className="empty">Şu an yaklaşan herkese açık etkinlik yok.</p> : (
-            <div className="row-cards">
-              {upcoming.map((event) => (
-                <Link key={event.id} href={`/events/${event.id}`} className="row-card">
-                  <strong>{event.title}</strong>
-                  <span className="meta-line">
-                    {new Date(event.starts_at).toLocaleString('tr-TR', { dateStyle: 'medium', timeStyle: 'short' })}
-                    {cityById(event.region_id) ? ` · ${cityById(event.region_id)?.name}` : ''}
-                  </span>
-                </Link>
-              ))}
-            </div>
-          )}
-          <p><Link href="/events">Karadeniz etkinlikleri</Link></p>
-        </div>
-      </section>
-
-      <section className="band" id="insanlar">
-        <div className="wrap">
-          <h2>İnsanlar</h2>
-          <p className="lead">Arama motorunda görünmeyi açmış herkese açık profiller.</p>
-          {people.length === 0 ? <p className="empty">Şu an listelenecek profil yok.</p> : (
-            <div className="row-cards">
-              {people.map((person) => (
-                <Link key={person.id} href={`/u/${person.username}`} className="row-card">
-                  <strong>{displayName(person.full_name, person.username)}</strong>
-                  <span className="meta-line">@{person.username}</span>
-                </Link>
-              ))}
-            </div>
-          )}
-          <p><Link href="/people">Tüm herkese açık profiller</Link></p>
-        </div>
-      </section>
-
       <section className="band" id="is">
-        <div className="wrap split">
-          <div>
-            <h2>İş ve fırsatlar</h2>
-            <p>İlanlar şehirle ilişkilidir ve uygulamadaki iş alanında yayınlanır. Web’de karşılığı olmayan boş bir ilan sayfası açılmaz; kayıt herkese açık olduğunda şehir sayfasına bağlanır.</p>
-          </div>
-          <div>
-            <h2 id="hizmetler">Hizmetler</h2>
-            <p>Usta, servis ve randevu kayıtları uygulamanın hizmet merkezindedir. Doğrulanmamış bir listeyi arama sonucuna çıkarmak yerine, şehir sayfası yalnızca yayındaki kaydı gösterir.</p>
-          </div>
-        </div>
-      </section>
-
-      <section className="band" id="pazar">
-        <div className="wrap split">
-          <div>
-            <h2>Pazar</h2>
-            <p>İkinci el ve yerel satış, hesabın bağlı olduğu şehirde yürür. Kapalı ilanlar bu sitede yer almaz.</p>
-          </div>
-          <div>
-            <h2 id="yolculuk">Yolculuk</h2>
-            <p>Paylaşımlı yolculuk ilanları uygulamada açılır. Güzergâh ve koltuk bilgisi ancak ilan sahibi herkese açtıysa görünür.</p>
-            <p><Link href="/discover">Ağa uygulamadan devam et</Link></p>
-          </div>
-        </div>
-      </section>
-
-      <section className="band" id="paylasimlar">
         <div className="wrap">
-          <h2>Son paylaşımlar</h2>
-          {posts.length === 0 ? <p className="empty">Herkese açık paylaşım yok.</p> : (
-            <div className="row-cards">
-              {posts.map((post) => (
-                <Link key={post.id} href={`/p/${post.id}`} className="row-card">
-                  <strong>{postHeadline(post)}</strong>
-                  <span className="meta-line">
-                    {displayName(post.author_name, post.author_username)}
-                    {cityById(post.region_id) ? ` · ${cityById(post.region_id)?.name}` : ''}
-                  </span>
-                </Link>
-              ))}
-            </div>
-          )}
-          <p><Link href="/posts">Herkese açık paylaşımlar</Link></p>
+          <h2>Ağda gezin</h2>
+          <div className="action-row">
+            <Link href="/posts">Paylaşımlar</Link>
+            <Link href="/events">Etkinlikler</Link>
+            <Link href="/people">İnsanlar</Link>
+            <Link href="/blog">Blog</Link>
+            <Link id="hizmetler" href="/discover">Hizmetler</Link>
+            <Link id="pazar" href="/discover">Pazar</Link>
+            <Link id="yolculuk" href="/discover">Yolculuk</Link>
+          </div>
         </div>
       </section>
 
       <section className="band" id="blog">
         <div className="wrap">
-          <h2>Şehirlerden yazılar</h2>
+          <h2>Yazılar</h2>
           {blogs.length === 0 ? <p className="empty">Yayımlanmış blog yazısı yok.</p> : (
             <div className="row-cards">
               {blogs.map((post) => (
@@ -199,15 +197,14 @@ export default async function HomePage() {
               ))}
             </div>
           )}
-          <p><Link href="/blog">Blog</Link></p>
         </div>
       </section>
 
       <section className="band" id="uygulama">
-        <div className="wrap split">
+        <div className="wrap home-hero-grid">
           <div>
             <h2>Vora uygulaması</h2>
-            <p>Şehir odası, mesaj ve paylaşım telefonda. Web okumak ve bulmak içindir.</p>
+            <p className="lead">Şehir odası, mesaj ve paylaşım telefonda. Web okumak ve bulmak içindir.</p>
             <div className="home-actions">
               <a className="btn" href={IOS_APP_STORE_URL}>App Store</a>
               <a className="btn ghost" href={ANDROID_PLAY_STORE_URL}>Google Play</a>
@@ -215,7 +212,6 @@ export default async function HomePage() {
           </div>
           <div>
             <h2>Güvenli kullanım</h2>
-            <p>Hesap silme, gizlilik ve topluluk kuralları açık sayfalardadır. Destek adresi support@litxtech.com.</p>
             <p>
               <Link href="/community-rules">Topluluk kuralları</Link>
               {' · '}
@@ -236,12 +232,20 @@ export default async function HomePage() {
               <p>{item.answer}</p>
             </article>
           ))}
-          <div className="home-actions">
-            <Link className="btn" href="/register">Vora’ya katıl</Link>
-            <Link className="btn ghost" href="/cities">Şehirlere bak</Link>
-          </div>
         </div>
       </section>
     </>
   );
+}
+
+function peopleSafe(people: PublicProfile[], regionId: string) {
+  return people.filter((person) => person.region_id === regionId).slice(0, 4);
+}
+
+function score(board: { posts: PublicPost[]; events: PublicEvent[]; locals: PublicProfile[] }) {
+  return board.posts.length + board.events.length + board.locals.length;
+}
+
+function cityName(regionId: string) {
+  return CITIES.find((city) => city.id === regionId)?.name ?? '';
 }
