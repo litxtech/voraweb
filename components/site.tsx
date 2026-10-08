@@ -134,7 +134,7 @@ export function JsonLd({ data }: { data: Record<string, unknown> }) {
 
 export function CtaBand() {
   return (
-    <section className="block">
+    <section className="block store-cta">
       <div className="wrap panel">
         <h2>Vora’yı telefonuna indir</h2>
         <p>Karadeniz’deki şehir odalarına, herkese açık paylaşımlara ve etkinliklere uygulamadan devam et.</p>

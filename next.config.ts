@@ -53,6 +53,42 @@ const nextConfig: NextConfig = {
       { protocol: 'https', hostname: 'play.google.com' },
     ],
   },
+  async redirects() {
+    return [
+      { source: '/posts', destination: '/', permanent: false },
+      { source: '/explore', destination: '/discover', permanent: false },
+      { source: '/app', destination: '/', permanent: false },
+      { source: '/app/explore', destination: '/discover', permanent: false },
+      { source: '/app/reels', destination: '/reels', permanent: false },
+      { source: '/app/profile', destination: '/profile', permanent: false },
+      { source: '/app/messages', destination: '/messages', permanent: false },
+      { source: '/app/compose', destination: '/compose', permanent: false },
+    ];
+  },
+  async rewrites() {
+    const app = '/vora-app.html';
+    const screens = [
+      '/',
+      '/discover',
+      '/reels',
+      '/profile',
+      '/messages',
+      '/messages/:path*',
+      '/compose',
+      '/create',
+      '/settings',
+      '/settings/:path*',
+      '/login',
+      '/register',
+      '/notifications',
+      '/chat/:path*',
+      '/u/:path*',
+    ];
+    return {
+      beforeFiles: screens.map((source) => ({ source, destination: app })),
+      fallback: [{ source: '/:path*', destination: app }],
+    };
+  },
   async headers() {
     return [
       {
@@ -61,7 +97,7 @@ const nextConfig: NextConfig = {
           { key: 'X-Content-Type-Options', value: 'nosniff' },
           { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
           { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
-          { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
+          { key: 'Permissions-Policy', value: 'camera=(self), microphone=(self), geolocation=(self)' },
         ],
       },
     ];

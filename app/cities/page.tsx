@@ -16,12 +16,11 @@ export default function CitiesPage() {
     <section className="block">
       <div className="wrap">
         <h1>Şehirler</h1>
-        <p>Liste, uygulamadaki Karadeniz il kimlikleriyle aynıdır.</p>
-        <div className="grid-3">
+        <div className="city-list">
           {CITIES.map((city) => (
-            <Link className="card" key={city.id} href={`/city/${city.id}`}>
-              <h2>{city.name}</h2>
-              <p className="meta">{city.intro}</p>
+            <Link key={city.id} href={`/city/${city.id}`}>
+              <strong>{city.name}</strong>
+              <span>{city.intro}</span>
             </Link>
           ))}
         </div>

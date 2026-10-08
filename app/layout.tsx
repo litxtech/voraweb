@@ -1,8 +1,8 @@
 import type { Metadata } from 'next';
 import { Analytics } from '@/components/analytics';
 import { OpenInApp } from '@/components/open-in-app';
+import { AppChrome } from '@/components/app-chrome';
 import { SiteFooter, SiteHeader } from '@/components/site';
-import { SiteTabBar } from '@/components/site-tabs';
 import { graph, organizationLd, softwareLd, websiteLd } from '@/lib/seo/engine';
 import { isIndexableDeployment, siteUrl, SITE_NAME } from '@/lib/site';
 import './globals.css';
@@ -22,13 +22,18 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="tr">
       <body>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: "document.body.dataset.chrome=location.pathname.indexOf('/admin')===0||location.pathname.indexOf('/app')===0?'site':'app'",
+          }}
+        />
         <a className="skip" href="#icerik">
           İçeriğe geç
         </a>
         <SiteHeader />
         <main id="icerik">{children}</main>
         <SiteFooter />
-        <SiteTabBar />
+        <AppChrome />
         <OpenInApp />
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
         <Analytics />

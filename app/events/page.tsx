@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { cityById } from '@/lib/cities';
 import { listEvents } from '@/lib/data';
 import { toMetadata } from '@/lib/seo/engine';
 
@@ -20,23 +21,29 @@ export default async function EventsPage() {
     <section className="block">
       <div className="wrap">
         <h1>Etkinlikler</h1>
-        <h2>Yaklaşan</h2>
+        <h2 className="app-section">Yaklaşan</h2>
         {upcoming.length === 0 ? <p className="empty">Yaklaşan herkese açık etkinlik yok.</p> : null}
-        <ul>
+        <div className="stack">
           {upcoming.map((event) => (
-            <li key={event.id}>
-              <Link href={`/events/${event.id}`}>{event.title}</Link>
-            </li>
+            <Link key={event.id} href={`/events/${event.id}`} className="event-card">
+              {event.cover_url ? <img src={event.cover_url} alt="" /> : null}
+              <strong>{event.title}</strong>
+              <span>
+                {new Date(event.starts_at).toLocaleString('tr-TR', { dateStyle: 'medium', timeStyle: 'short' })}
+                {cityById(event.region_id) ? ` · ${cityById(event.region_id)?.name}` : ''}
+              </span>
+            </Link>
           ))}
-        </ul>
-        <h2>Arşiv</h2>
-        <ul>
+        </div>
+        <h2 className="app-section">Arşiv</h2>
+        <div className="stack">
           {past.map((event) => (
-            <li key={event.id}>
-              <Link href={`/events/${event.id}`}>{event.title}</Link>
-            </li>
+            <Link key={event.id} href={`/events/${event.id}`} className="event-card">
+              <strong>{event.title}</strong>
+              <span>{new Date(event.starts_at).toLocaleDateString('tr-TR')}</span>
+            </Link>
           ))}
-        </ul>
+        </div>
       </div>
     </section>
   );
