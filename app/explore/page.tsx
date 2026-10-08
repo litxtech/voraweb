@@ -23,7 +23,8 @@ export default async function ExplorePage() {
   return (
     <section className="block">
       <div className="wrap">
-        <h1 className="sr-only">Keşfet</h1>
+        <h1>Keşfet</h1>
+        <p className="lead">Şehir, insan, paylaşım, etkinlik ve yazı. Liste herkese açık kayıtlardan gelir.</p>
         <form className="disc-search" action="/search">
           <input name="q" placeholder="İsim veya kullanıcı adı ara…" aria-label="Ara" />
         </form>

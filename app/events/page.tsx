@@ -5,8 +5,8 @@ import { listEvents } from '@/lib/data';
 import { toMetadata } from '@/lib/seo/engine';
 
 export const metadata: Metadata = toMetadata({
-  title: 'Etkinlikler',
-  description: 'Vora’da yayındaki herkese açık etkinlikler. Geçmiş etkinlikler silinmez, arşivde kalır.',
+  title: 'Karadeniz Etkinlikleri',
+  description: 'Karadeniz’deki konserler, festivaller, kültür-sanat etkinlikleri, spor organizasyonları ve yerel etkinlikler. Yalnızca yayındaki herkese açık kayıtlar listelenir.',
   path: '/events',
   index: true,
   type: 'website',
@@ -20,7 +20,8 @@ export default async function EventsPage() {
   return (
     <section className="block">
       <div className="wrap">
-        <h1>Etkinlikler</h1>
+        <h1>Karadeniz etkinlikleri</h1>
+        <p className="lead">Karadeniz’deki konserler, festivaller, kültür-sanat etkinlikleri, spor organizasyonları ve yerel etkinlikler.</p>
         <h2 className="app-section">Yaklaşan</h2>
         {upcoming.length === 0 ? <p className="empty">Yaklaşan herkese açık etkinlik yok.</p> : null}
         <div className="stack">

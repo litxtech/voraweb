@@ -55,9 +55,7 @@ const nextConfig: NextConfig = {
   },
   async redirects() {
     return [
-      { source: '/posts', destination: '/', permanent: false },
-      { source: '/explore', destination: '/discover', permanent: false },
-      { source: '/app', destination: '/', permanent: false },
+      { source: '/app', destination: '/discover', permanent: false },
       { source: '/app/explore', destination: '/discover', permanent: false },
       { source: '/app/reels', destination: '/reels', permanent: false },
       { source: '/app/profile', destination: '/profile', permanent: false },
@@ -68,7 +66,6 @@ const nextConfig: NextConfig = {
   async rewrites() {
     const app = '/vora-app.html';
     const screens = [
-      '/',
       '/discover',
       '/reels',
       '/profile',
@@ -82,11 +79,9 @@ const nextConfig: NextConfig = {
       '/register',
       '/notifications',
       '/chat/:path*',
-      '/u/:path*',
     ];
     return {
       beforeFiles: screens.map((source) => ({ source, destination: app })),
-      fallback: [{ source: '/:path*', destination: app }],
     };
   },
   async headers() {

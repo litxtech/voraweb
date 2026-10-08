@@ -55,7 +55,15 @@ export default async function CityPage({ params }: { params: Promise<Params> }) 
       <div className="wrap prose">
         <Breadcrumbs items={crumbs} />
         <h1>{city.name}</h1>
+        <h2>{`${city.name} şehrinde Vora`}</h2>
         <p>{city.intro}</p>
+        <nav className="hub-nav" aria-label={`${city.name} bölümleri`}>
+          <a href="#insanlar">İnsanlar</a>
+          <a href="#paylasimlar">Paylaşımlar</a>
+          <a href="#etkinlikler">Etkinlikler</a>
+          <a href="#blog">Yazılar</a>
+          <Link href="/events">Karadeniz etkinlikleri</Link>
+        </nav>
         <ShareBar path={absoluteUrl(`/city/${city.id}`)} title={`${city.name} · Vora`} />
         <h2>Şehir hakkında</h2>
         <p>{city.history}</p>
@@ -84,7 +92,7 @@ export default async function CityPage({ params }: { params: Promise<Params> }) 
         ) : (
           <p className="muted">Bu il için ayrı konu sayfası, özgün metin yazılmadan açılmadı.</p>
         )}
-        <h2>{`${city.name}’daki Vora kullanıcıları`}</h2>
+        <h2 id="insanlar">{`${city.name}’daki insanlar`}</h2>
         {locals.length === 0 ? (
           <p className="empty">Bu ile bağlı herkese açık profil şu an listelenmiyor.</p>
         ) : (
@@ -97,7 +105,7 @@ export default async function CityPage({ params }: { params: Promise<Params> }) 
             ))}
           </div>
         )}
-        <h2>{`${city.name}’dan son paylaşımlar`}</h2>
+        <h2 id="paylasimlar">{`${city.name} paylaşımları`}</h2>
         {posts.length === 0 ? (
           <p className="empty">Bu ilde koşulları sağlayan herkese açık paylaşım yok.</p>
         ) : (
@@ -109,7 +117,7 @@ export default async function CityPage({ params }: { params: Promise<Params> }) 
             ))}
           </div>
         )}
-        <h2>{`${city.name}’daki etkinlikler`}</h2>
+        <h2 id="etkinlikler">{`${city.name} etkinlikleri`}</h2>
         {events.length === 0 ? (
           <p className="empty">Yayında etkinlik yok.</p>
         ) : (
@@ -121,7 +129,7 @@ export default async function CityPage({ params }: { params: Promise<Params> }) 
             ))}
           </ul>
         )}
-        <h2>{`${city.name} rehberleri`}</h2>
+        <h2 id="blog">{`${city.name} yazıları`}</h2>
         {blogs.length === 0 ? (
           <p className="empty">Bu şehre bağlı yayımlanmış blog yazısı yok.</p>
         ) : (
