@@ -28,10 +28,9 @@ export async function SiteHeader() {
           <Link href="/cities">Şehirler</Link>
           <Link href="/explore">Keşfet</Link>
           <Link href="/events">Etkinlikler</Link>
-          <Link href="/#is">İş ve fırsatlar</Link>
-          <Link href="/#hizmetler">Hizmetler</Link>
-          <Link href="/#pazar">Pazar</Link>
           <Link href="/blog">Blog</Link>
+          <Link href="/download">İndir</Link>
+          <Link href="/about">Hakkında</Link>
           {session ? (
             <>
               <Link className="btn" href="/app">

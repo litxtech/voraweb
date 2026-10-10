@@ -14,6 +14,21 @@ export const metadata: Metadata = {
   description: 'Vora, Karadeniz şehirlerindeki insanları, işletmeleri, etkinlikleri ve yerel yaşamı aynı ağda buluşturur.',
   robots: isIndexableDeployment() ? { index: true, follow: true } : { index: false, follow: false },
   icons: { icon: '/vora-logo.png' },
+  openGraph: {
+    title: `${SITE_NAME} — Karadeniz'in dijital şehir ağı`,
+    description: 'Şehrindeki insanları, işletmeleri, etkinlikleri ve günlük yaşamı tek yerde keşfet.',
+    url: siteUrl(),
+    siteName: SITE_NAME,
+    locale: 'tr_TR',
+    type: 'website',
+    images: [{ url: '/vora-logo.png', alt: 'Vora' }],
+  },
+  twitter: {
+    card: 'summary',
+    title: `${SITE_NAME} — Karadeniz'in dijital şehir ağı`,
+    description: 'Şehrindeki insanları, işletmeleri, etkinlikleri ve günlük yaşamı tek yerde keşfet.',
+    images: ['/vora-logo.png'],
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

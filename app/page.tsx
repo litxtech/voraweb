@@ -79,6 +79,16 @@ export default async function HomePage() {
               <Link className="btn" href="/explore">Vora’yı keşfet</Link>
               <Link className="btn ghost" href="#sehirler">Şehrini seç</Link>
             </div>
+            <nav className="home-shortcuts" aria-label="Site bölümleri">
+              <Link href="/cities">Şehirler</Link>
+              <Link href="/explore">Keşfet</Link>
+              <Link href="/posts">Paylaşımlar</Link>
+              <Link href="/events">Etkinlikler</Link>
+              <Link href="/blog">Blog</Link>
+              <Link href="/download">İndir</Link>
+              <Link href="/about">Hakkında</Link>
+              <Link href="/contact">İletişim</Link>
+            </nav>
           </div>
           <aside className="live-card" aria-label="Son herkese açık paylaşım">
             <p className="kicker">Ağda son kayıt</p>

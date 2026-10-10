@@ -46,13 +46,15 @@ export function toMetadata(doc: SeoDocument): Metadata {
       siteName: SITE_NAME,
       locale: doc.language === 'en' ? 'en_US' : doc.language === 'de' ? 'de_DE' : doc.language === 'es' ? 'es_ES' : 'tr_TR',
       type: doc.type === 'article' ? 'article' : 'website',
-      images: doc.image ? [{ url: doc.image }] : [{ url: absoluteUrl('/vora-logo.png') }],
+      images: doc.image
+        ? [{ url: doc.image, alt: doc.title }]
+        : [{ url: absoluteUrl('/vora-logo.png'), alt: 'Vora' }],
     },
     twitter: {
-      card: doc.image ? 'summary_large_image' : 'summary',
+      card: 'summary',
       title: doc.title,
       description: doc.description,
-      images: doc.image ? [doc.image] : undefined,
+      images: [doc.image || absoluteUrl('/vora-logo.png')],
     },
   };
 }
@@ -75,7 +77,10 @@ export function organizationLd(): Record<string, unknown> {
     name: SITE_NAME,
     legalName: 'LitxTech',
     url: siteUrl(),
-    logo: absoluteUrl('/vora-logo.png'),
+    logo: {
+      '@type': 'ImageObject',
+      url: absoluteUrl('/vora-logo.png'),
+    },
     email: 'support@litxtech.com',
   };
 }
@@ -86,7 +91,16 @@ export function websiteLd(): Record<string, unknown> {
     name: SITE_NAME,
     url: siteUrl(),
     inLanguage: 'tr',
+    description: 'Karadeniz şehirlerindeki insanlar, etkinlikler ve yerel yaşam.',
     publisher: { '@type': 'Organization', name: SITE_NAME, url: siteUrl() },
+    potentialAction: {
+      '@type': 'SearchAction',
+      target: {
+        '@type': 'EntryPoint',
+        urlTemplate: `${siteUrl()}/search?q={search_term_string}`,
+      },
+      'query-input': 'required name=search_term_string',
+    },
   };
 }
 
