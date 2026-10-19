@@ -1,4 +1,4 @@
-import { memo, useMemo, useState } from 'react';
+import { memo, useMemo } from 'react';
 import { Image, type ImageContentFit, type ImageProps, type ImageStyle } from 'expo-image';
 import { StyleSheet, type StyleProp } from 'react-native';
 import { optimizedImageUrl } from '@/lib/media/optimizedImageUrl';
@@ -25,15 +25,12 @@ export const OptimizedImage = memo(function OptimizedImage({
   onLoad,
   accessibilityLabel,
 }: OptimizedImageProps) {
-  const [useOriginal, setUseOriginal] = useState(false);
-
   const trimmedUri = uri?.trim() ?? null;
 
   const source = useMemo(() => {
     if (!trimmedUri) return null;
-    if (useOriginal) return trimmedUri;
     return optimizedImageUrl(trimmedUri, tier, layoutWidth) ?? trimmedUri;
-  }, [trimmedUri, tier, layoutWidth, useOriginal]);
+  }, [trimmedUri, tier, layoutWidth]);
 
   if (!source) return null;
 
@@ -47,9 +44,6 @@ export const OptimizedImage = memo(function OptimizedImage({
       recyclingKey={recyclingKey ?? source}
       transition={transition}
       onLoad={onLoad}
-      onError={() => {
-        if (!useOriginal && trimmedUri) setUseOriginal(true);
-      }}
       accessibilityLabel={accessibilityLabel}
     />
   );
