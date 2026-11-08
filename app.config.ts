@@ -79,7 +79,7 @@ const config: ExpoConfig = {
   name: APP_NAME,
   slug: APP_SLUG,
   owner: 'voralive',
-  version: '2.5.0',
+  version: '2.5.1',
   orientation: 'default',
   icon: './assets/icon-ios.png',
   scheme: APP_SCHEME,
@@ -90,7 +90,7 @@ const config: ExpoConfig = {
     supportsTablet: false,
     bundleIdentifier: APP_BUNDLE_ID,
     appleTeamId: APPLE_TEAM_ID,
-    buildNumber: '21',
+    buildNumber: '22',
     associatedDomains: [`applinks:${APP_DOMAIN}`],
     entitlements: {
       'aps-environment': apnsEnvironment,
