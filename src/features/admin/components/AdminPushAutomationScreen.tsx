@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, StyleSheet, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, View } from 'react-native';
+import { router, type Href } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { Button } from '@/components/ui/Button';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { Text } from '@/components/ui/Text';
@@ -12,17 +14,21 @@ import { PushQuickComposer } from '@/features/push-automation/components/PushQui
 import {
   deletePushAutomationTemplate,
   fetchPushAutomationRuns,
+  fetchPushRegisteredUsers,
   fetchPushAutomationTemplates,
   runPushAutomationTemplate,
   upsertPushAutomationTemplate,
+  type PushRegisteredUser,
 } from '@/features/push-automation/services/pushAutomationAdmin';
 import type { PushAutomationRun, PushAutomationTemplate } from '@/features/push-automation/types';
 import { formFromTemplate } from '@/features/push-automation/utils/form';
 import { spacing } from '@/constants/theme';
 
 export function AdminPushAutomationScreen() {
+  const arrowColor = '#2563EB';
   const [templates, setTemplates] = useState<PushAutomationTemplate[]>([]);
   const [runs, setRuns] = useState<PushAutomationRun[]>([]);
+  const [registeredUsers, setRegisteredUsers] = useState<PushRegisteredUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<PushAutomationTemplate | null | 'new'>(null);
@@ -30,9 +36,14 @@ export function AdminPushAutomationScreen() {
   const load = async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
     else setLoading(true);
-    const [tRes, rRes] = await Promise.all([fetchPushAutomationTemplates(), fetchPushAutomationRuns()]);
+    const [tRes, rRes, usersRes] = await Promise.all([
+      fetchPushAutomationTemplates(),
+      fetchPushAutomationRuns(),
+      fetchPushRegisteredUsers(20),
+    ]);
     setTemplates(tRes.data);
     setRuns(rRes.data);
+    setRegisteredUsers(usersRes.data);
     setLoading(false);
     setRefreshing(false);
     if (tRes.error) Alert.alert('Hata', tRes.error);
@@ -155,6 +166,36 @@ export function AdminPushAutomationScreen() {
           ))}
         </GlassCard>
       ) : null}
+
+      <GlassCard style={styles.history}>
+        <AdminSectionHeader title="Push kayitli kullanicilar" hint={`${registeredUsers.length} kisi`} />
+        {registeredUsers.length === 0 ? (
+          <Text secondary variant="caption">Kayitli kullanici bulunamadi.</Text>
+        ) : (
+          registeredUsers.map((entry) => (
+            <Pressable
+              key={entry.userId}
+              style={styles.userRow}
+              onPress={() => router.push(`/admin/users/${entry.userId}` as Href)}
+            >
+              <View style={styles.userCopy}>
+                <Text variant="caption" style={{ fontWeight: '700' }}>
+                  {entry.fullName ?? (entry.username ? `@${entry.username}` : entry.userId)}
+                </Text>
+                <Text secondary variant="caption">
+                  {entry.username ? `@${entry.username} · ` : ''}{entry.tokenCount} token · {entry.platforms.join(', ') || '-'}
+                </Text>
+              </View>
+              <View style={styles.userDetailLink}>
+                <Text variant="caption" style={{ color: arrowColor, fontWeight: '700' }}>
+                  Detay
+                </Text>
+                <Ionicons name="chevron-forward" size={16} color={arrowColor} />
+              </View>
+            </Pressable>
+          ))
+        )}
+      </GlassCard>
     </AdminShell>
   );
 }
@@ -172,5 +213,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingVertical: spacing.xs,
+  },
+  userRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+    paddingVertical: spacing.xs,
+  },
+  userCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  userDetailLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
   },
 });

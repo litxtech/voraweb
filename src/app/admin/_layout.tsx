@@ -21,6 +21,7 @@ export default function AdminLayout() {
       <Stack.Screen name="staff" />
       <Stack.Screen name="account-lifecycle" />
       <Stack.Screen name="support" />
+      <Stack.Screen name="feature-requests" />
       <Stack.Screen name="appeals" />
       <Stack.Screen name="reports" />
       <Stack.Screen name="ai-moderation" />

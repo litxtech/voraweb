@@ -107,6 +107,69 @@ export async function fetchPushAutomationRuns(templateId?: string): Promise<{
   return { data: (data ?? []).map((row) => mapRun(row as Record<string, unknown>)), error: null };
 }
 
+export type PushRegisteredUser = {
+  userId: string;
+  username: string | null;
+  fullName: string | null;
+  role: string | null;
+  tokenCount: number;
+  lastTokenAt: string;
+  platforms: string[];
+};
+
+export async function fetchPushRegisteredUsers(limit = 20): Promise<{
+  data: PushRegisteredUser[];
+  error: string | null;
+}> {
+  const { data, error } = await supabase
+    .from('push_tokens')
+    .select('user_id, platform, updated_at, profiles(username, full_name, role)')
+    .eq('is_active', true)
+    .order('updated_at', { ascending: false })
+    .limit(400);
+
+  if (error) return { data: [], error: supabaseErrorMessage(error)! };
+
+  const grouped = new Map<string, PushRegisteredUser>();
+  for (const row of (data ?? []) as Array<Record<string, unknown>>) {
+    const userId = String(row.user_id ?? '');
+    if (!userId) continue;
+    const profile = (row.profiles ?? {}) as Record<string, unknown>;
+    const role = typeof profile.role === 'string' ? profile.role : null;
+    if (role !== 'admin' && role !== 'super_admin') continue;
+    const lastTokenAt = String(row.updated_at ?? new Date(0).toISOString());
+    const platform = String(row.platform ?? '').trim();
+
+    const existing = grouped.get(userId);
+    if (!existing) {
+      grouped.set(userId, {
+        userId,
+        username: typeof profile.username === 'string' ? profile.username : null,
+        fullName: typeof profile.full_name === 'string' ? profile.full_name : null,
+        role,
+        tokenCount: 1,
+        lastTokenAt,
+        platforms: platform ? [platform] : [],
+      });
+      continue;
+    }
+
+    existing.tokenCount += 1;
+    if (new Date(lastTokenAt).getTime() > new Date(existing.lastTokenAt).getTime()) {
+      existing.lastTokenAt = lastTokenAt;
+    }
+    if (platform && !existing.platforms.includes(platform)) {
+      existing.platforms.push(platform);
+    }
+  }
+
+  const sorted = [...grouped.values()]
+    .sort((a, b) => new Date(b.lastTokenAt).getTime() - new Date(a.lastTokenAt).getTime())
+    .slice(0, Math.max(1, limit));
+
+  return { data: sorted, error: null };
+}
+
 export async function upsertPushAutomationTemplate(
   input: PushAutomationTemplateInput,
 ): Promise<{ id: string | null; error: string | null }> {

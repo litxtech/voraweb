@@ -200,6 +200,7 @@ export const ADMIN_MENU_SECTIONS = [
       { id: 'staff', label: 'Yönetici Atama', icon: 'shield-checkmark-outline' as const, href: '/admin/staff', adminOnly: true, accent: 'danger' as const },
       { id: 'account-lifecycle', label: 'Hesap Yaşam Döngüsü', icon: 'sync-outline' as const, href: '/admin/account-lifecycle', adminOnly: true, accent: 'warning' as const },
       { id: 'support', label: 'Destek Talepleri', icon: 'chatbubbles-outline' as const, href: '/admin/support', adminOnly: true, accent: 'primary' as const },
+      { id: 'feature-requests', label: 'İstek ve Öneriler', icon: 'bulb-outline' as const, href: '/admin/feature-requests', adminOnly: true, accent: 'warning' as const },
       { id: 'live-support', label: 'Canlı Destek', icon: 'headset-outline' as const, href: '/admin/live-support', adminOnly: true, accent: 'primary' as const },
       { id: 'premium-support', label: 'Premium Abonelik Desteği', icon: 'diamond-outline' as const, href: '/admin/premium-support', adminOnly: true, accent: 'success' as const },
       { id: 'appeals', label: 'İtirazlar', icon: 'hand-left-outline' as const, href: '/admin/appeals', adminOnly: false, accent: 'warning' as const },
