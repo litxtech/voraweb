@@ -1,17 +1,20 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Dimensions,
   Keyboard,
+  Modal,
+  Platform,
   Pressable,
   StyleSheet,
   TextInput,
   View,
 } from 'react-native';
-import { router } from 'expo-router';
+import { BlurView } from 'expo-blur';
+import { router, type Href } from 'expo-router';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
+  cancelAnimation,
   Easing,
   Extrapolation,
   interpolate,
@@ -31,7 +34,8 @@ import { StoryLinkOverlay } from '@/features/stories/components/StoryLinkOverlay
 import { StoryProgressBars } from '@/features/stories/components/StoryProgressBars';
 import { StoryReplyBar } from '@/features/stories/components/StoryReplyBar';
 import { StoryPeekPreview, StorySlide } from '@/features/stories/components/StorySlide';
-import { StoryTextOverlayView } from '@/features/stories/components/StoryTextOverlayView';
+import { StoryMediaErrorOverlay } from '@/features/stories/components/StoryMediaErrorOverlay';
+import { isStoryImageItem } from '@/features/stories/services/storyMediaUrl';
 import { storyCardFrameStyle } from '@/features/stories/utils/storyCardChrome';
 import { shouldStackStoryMusicAboveLocation } from '@/features/stories/utils/storyLocation';
 import {
@@ -46,6 +50,13 @@ import { useStoryAutoAdvance } from '@/features/stories/hooks/useStoryAutoAdvanc
 import { useStoryKeyboardHeight } from '@/features/stories/hooks/useStoryKeyboardHeight';
 import { useStoryViewerMediaZoom } from '@/features/stories/hooks/useStoryViewerMediaZoom';
 import { deleteStoryItem } from '@/features/stories/services/deleteStoryItem';
+import {
+  dismissCloseDuration,
+  dismissOpacity,
+  dismissScale,
+  shouldDismissOnRelease,
+  STORY_DISMISS_SPRING,
+} from '@/features/stories/utils/storyDismissAnimation';
 import { fetchStoryBundle } from '@/features/stories/services/fetchStoryBundle';
 import { prefetchStoryRings } from '@/features/stories/services/storyRingSession';
 import { formatStoryTime } from '@/features/stories/utils/formatStoryTime';
@@ -57,7 +68,13 @@ import { sendStoryReply } from '@/features/stories/services/sendStoryReply';
 import { toggleStoryReaction } from '@/features/stories/services/storyReactions';
 import { useStoryRingStore } from '@/features/stories/store/storyRingStore';
 import { useStoryViewerStore } from '@/features/stories/store/storyViewerStore';
-import type { StoryBundle, StoryInsights, StoryItem, StoryNavigation } from '@/features/stories/types';
+import type {
+  StoryBundle,
+  StoryInsights,
+  StoryItem,
+  StoryMediaStatus,
+  StoryNavigation,
+} from '@/features/stories/types';
 import type { StoryLinkManifest } from '@/features/stories/utils/storyLinks';
 import { ProfileAvatar } from '@/features/profile/components/ProfileAvatar';
 import { navigateToPublicProfile } from '@/features/profile/services/profileNavigation';
@@ -67,14 +84,22 @@ import { prefetchStoryBundleMedia } from '@/features/stories/services/prefetchSt
 import { ensureReelFeedAudioMode } from '@/features/music/services/audioPreview';
 import { spacing } from '@/constants/theme';
 import { openUrl } from '@/lib/linking/openUrl';
+import { shouldSkipUiBlur } from '@/lib/device/androidPerfProfile';
 import { useAuth } from '@/providers/AuthProvider';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const CARD_WIDTH = SCREEN_WIDTH - STORY_CARD_HORIZONTAL_INSET * 2;
 const SWIPE_THRESHOLD = CARD_WIDTH * 0.22;
 const SWIPE_UP_THRESHOLD = 56;
-const SWIPE_DOWN_THRESHOLD = 72;
-const SWIPE_DOWN_VELOCITY = 850;
+
+/**
+ * Sürükleme ekseni kilidi:
+ * 0 = belirsiz, 1 = aşağı (kapat), 2 = yatay (kullanıcı geçişi), 3 = yukarı (link/insights).
+ */
+const AXIS_NONE = 0;
+const AXIS_DOWN = 1;
+const AXIS_HORIZONTAL = 2;
+const AXIS_UP = 3;
 
 type StoryViewerScreenProps = {
   userId: string;
@@ -90,11 +115,14 @@ export function StoryViewerScreen({ userId }: StoryViewerScreenProps) {
   const setBundle = useStoryViewerStore((s) => s.setBundle);
   const setCurrentUserIndex = useStoryViewerStore((s) => s.setCurrentUserIndex);
   const setCurrentItemIndex = useStoryViewerStore((s) => s.setCurrentItemIndex);
+  const rememberLastSeenItemIndex = useStoryViewerStore((s) => s.rememberLastSeenItemIndex);
   const clearViewer = useStoryViewerStore((s) => s.clear);
   const markRingSeen = useStoryRingStore((s) => s.markUserSeen);
 
   const [loading, setLoading] = useState(true);
   const [isPaused, setIsPaused] = useState(false);
+  /** Sürükleme sırasında süre işlemez — IG gibi parmak kalkınca devam eder. */
+  const [dragging, setDragging] = useState(false);
   const [progress, setProgress] = useState(0);
   const [insightsVisible, setInsightsVisible] = useState(false);
   const [insightsLoading, setInsightsLoading] = useState(false);
@@ -104,10 +132,27 @@ export function StoryViewerScreen({ userId }: StoryViewerScreenProps) {
   const [replyBarHeight, setReplyBarHeight] = useState(56);
   const [inputFocused, setInputFocused] = useState(false);
   const [musicInfoOpen, setMusicInfoOpen] = useState(false);
+  const [deletingStory, setDeletingStory] = useState(false);
+  const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [closingByGesture, setClosingByGesture] = useState(false);
+  const [mediaStatusEntry, setMediaStatusEntry] = useState<{
+    key: string | null;
+    status: StoryMediaStatus;
+  }>({ key: null, status: 'loading' });
+  const [mediaRetryToken, setMediaRetryToken] = useState(0);
   const videoProgressRef = useRef({ sec: 0, dur: null as number | null });
 
   const replyInputRef = useRef<TextInput>(null);
   const inputFocusedRef = useRef(false);
+
+  const closeToFeed = useCallback(() => {
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+    router.replace('/(tabs)' as Href);
+  }, []);
 
   useEffect(() => {
     inputFocusedRef.current = inputFocused;
@@ -130,6 +175,12 @@ export function StoryViewerScreen({ userId }: StoryViewerScreenProps) {
   const transitionX = useSharedValue(0);
   const panX = useSharedValue(0);
   const dismissY = useSharedValue(0);
+  /** Sürüklemenin başladığı y: animasyon yarım kaldıysa oradan devam edilir. */
+  const dragStartY = useSharedValue(0);
+  /** 1 = kapatma animasyonu oynuyor; yeni dokunuş animasyonu bozmasın. */
+  const dismissingSv = useSharedValue(0);
+  /** Sürükleme ekseni — bir kez kilitlenir, titreşimle yön değişmez. */
+  const dragAxis = useSharedValue(AXIS_NONE);
   const insightsOpen = useSharedValue(0);
   const isOwnStorySv = useSharedValue(0);
   const hasSingleLinkSv = useSharedValue(0);
@@ -142,7 +193,27 @@ export function StoryViewerScreen({ userId }: StoryViewerScreenProps) {
   const items = bundle?.items ?? [];
   const activeItem: StoryItem | null = items[currentItemIndex] ?? null;
   const isOwnStory = !!user?.id && bundle?.authorId === user.id;
-  const slideInteractive = Boolean(activeItem) && !isPaused && !insightsVisible;
+  const slideInteractive =
+    Boolean(activeItem) && !isPaused && !insightsVisible && !deleteConfirmVisible;
+  const activeItemKey = activeItem ? `${activeUserId}-${activeItem.id}` : null;
+  const activeIsPhoto = activeItem
+    ? isStoryImageItem(activeItem.mediaType, activeItem.mediaUrl)
+    : false;
+
+  // Durum aktif öğe anahtarına bağlı: öğe değişince önceki öğenin "ready/error" değeri taşınmaz.
+  const mediaStatus: StoryMediaStatus =
+    mediaStatusEntry.key === activeItemKey ? mediaStatusEntry.status : 'loading';
+
+  const handleMediaStatusChange = useCallback(
+    (status: StoryMediaStatus) => {
+      setMediaStatusEntry({ key: activeItemKey, status });
+    },
+    [activeItemKey],
+  );
+
+  useEffect(() => {
+    setMediaRetryToken(0);
+  }, [activeItemKey]);
 
   const {
     isZoomed: isMediaZoomed,
@@ -153,7 +224,9 @@ export function StoryViewerScreen({ userId }: StoryViewerScreenProps) {
     resetZoom,
   } = useStoryViewerMediaZoom({
     resetKey: activeItem?.id ?? 'none',
-    enabled: slideInteractive,
+    // `isPaused`e bağlanmaz: duraklatma jest ağacını yeniden kurup
+    // sürükleme sırasında takılmaya yol açıyordu.
+    enabled: Boolean(activeItem),
   });
   const storyMusicAuthor = useMemo(
     () =>
@@ -213,9 +286,13 @@ export function StoryViewerScreen({ userId }: StoryViewerScreenProps) {
         if (userIndex < ringUserIds.length - 1) {
           setCurrentUserIndex(userIndex + 1);
         } else {
-          router.back();
+          closeToFeed();
         }
         return;
+      }
+      const currentIndex = useStoryViewerStore.getState().currentItemIndex;
+      if (currentIndex >= data.items.length) {
+        setCurrentItemIndex(Math.max(0, data.items.length - 1));
       }
       const userIndex = useStoryViewerStore.getState().currentUserIndex;
       const prefetchIds = [ringUserIds[userIndex - 1], ringUserIds[userIndex + 1]].filter(
@@ -228,7 +305,7 @@ export function StoryViewerScreen({ userId }: StoryViewerScreenProps) {
     return () => {
       cancelled = true;
     };
-  }, [activeUserId, loadBundle, ringUserIds, setCurrentUserIndex]);
+  }, [activeUserId, closeToFeed, loadBundle, ringUserIds, setCurrentUserIndex]);
 
   useEffect(() => {
     void ensureReelFeedAudioMode();
@@ -259,9 +336,12 @@ export function StoryViewerScreen({ userId }: StoryViewerScreenProps) {
 
   useLayoutEffect(() => {
     dismissY.value = 0;
+    dragStartY.value = 0;
+    dragAxis.value = AXIS_NONE;
+    dismissingSv.value = 0;
     panX.value = 0;
     transitionX.value = 0;
-  }, [activeUserId, dismissY, panX, transitionX]);
+  }, [activeUserId, dismissingSv, dismissY, dragStartY, dragAxis, panX, transitionX]);
 
   useEffect(() => {
     setProgress(0);
@@ -269,6 +349,11 @@ export function StoryViewerScreen({ userId }: StoryViewerScreenProps) {
     slideEnteredAtRef.current = Date.now();
     setReacted(activeItem?.hasReacted ?? false);
   }, [activeItem?.hasReacted, activeItem?.id]);
+
+  useEffect(() => {
+    if (!activeUserId || currentItemIndex < 0) return;
+    rememberLastSeenItemIndex(activeUserId, currentItemIndex);
+  }, [activeUserId, currentItemIndex, rememberLastSeenItemIndex]);
 
   const expectedDurationSec = useMemo(() => {
     if (!activeItem) return STORY_PHOTO_DURATION_MS / 1000;
@@ -294,9 +379,11 @@ export function StoryViewerScreen({ userId }: StoryViewerScreenProps) {
   );
 
   const closeViewer = useCallback(() => {
+    if (closingByGesture) return;
+    setClosingByGesture(true);
     void flushView('manual_close', true);
-    router.back();
-  }, [flushView]);
+    closeToFeed();
+  }, [closeToFeed, closingByGesture, flushView]);
 
   const animateUserTransition = useCallback(
     (direction: 1 | -1, after: () => void) => {
@@ -335,13 +422,14 @@ export function StoryViewerScreen({ userId }: StoryViewerScreenProps) {
         return;
       }
       void flushView('manual_close', true);
-      router.back();
+      closeToFeed();
     },
     [
       activeUserId,
       animateUserTransition,
       currentItemIndex,
       currentUserIndex,
+      closeToFeed,
       flushView,
       items.length,
       markRingSeen,
@@ -428,15 +516,18 @@ export function StoryViewerScreen({ userId }: StoryViewerScreenProps) {
   ]);
 
   const resumePlaybackIfAllowed = useCallback(() => {
-    if (!inputFocusedRef.current && !insightsVisible) {
+    if (!inputFocusedRef.current && !insightsVisible && !deleteConfirmVisible) {
       setIsPaused(false);
     }
-  }, [insightsVisible]);
+  }, [deleteConfirmVisible, insightsVisible]);
 
   useStoryAutoAdvance({
     item: activeItem,
-    isActive: Boolean(activeItem) && !insightsVisible,
-    isPaused,
+    isActive: Boolean(activeItem) && !insightsVisible && !deleteConfirmVisible,
+    // Fotoğraf yüklenmeden / hata durumundayken süre işlemez (boş kart geçip gitmez).
+    // Sürükleme/basılı tutma sırasında da durur → jest boyunca yeniden render yok.
+    isPaused:
+      isPaused || dragging || deleteConfirmVisible || (activeIsPhoto && mediaStatus !== 'ready'),
     onComplete: () => goNextItem('auto_forward'),
     onProgress: setProgress,
   });
@@ -495,20 +586,26 @@ export function StoryViewerScreen({ userId }: StoryViewerScreenProps) {
     ? (bundles[prevUserId]?.items[Math.max(0, (bundles[prevUserId]?.items.length ?? 1) - 1)] ?? null)
     : null;
 
+  /**
+   * Aşağı çekme animasyonu — tamamı UI thread'de:
+   * kart parmağı birebir takip eder, hafifçe küçülür ve yumuşakça kaybolur.
+   */
   const deckStyle = useAnimatedStyle(() => {
-    const dragProgress = Math.min(1, Math.max(0, dismissY.value) / 240);
+    const y = dismissY.value;
+    if (y <= 0.5) return {};
     return {
       transform: [
-        { translateY: dismissY.value },
-        { scale: 1 - dragProgress * 0.06 },
+        { translateY: y },
+        { scale: dismissScale(y, SCREEN_HEIGHT) },
       ],
-      opacity: 1 - dragProgress * 0.45,
+      opacity: dismissOpacity(y, SCREEN_HEIGHT),
     };
   });
 
   const mediaDeckStyle = useAnimatedStyle(() => {
     const offset = transitionX.value + panX.value;
     const progress = Math.min(1, Math.abs(offset) / CARD_WIDTH);
+    if (progress <= 0.001) return {};
     return {
       transform: [
         { translateX: offset },
@@ -550,9 +647,24 @@ export function StoryViewerScreen({ userId }: StoryViewerScreenProps) {
     };
   });
 
-  const contentLiftStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: -keyboardLift.value }],
-  }));
+  const dismissBackdropStyle = useAnimatedStyle(() => {
+    const progress = Math.min(1, Math.max(0, dismissY.value) / (SCREEN_HEIGHT * 0.7));
+    return {
+      opacity: interpolate(progress, [0, 1], [0, 0.34], Extrapolation.CLAMP),
+    };
+  });
+
+  const blurBackdropStyle = useAnimatedStyle(() => {
+    const progress = Math.min(1, Math.max(0, dismissY.value) / (SCREEN_HEIGHT * 0.7));
+    return {
+      opacity: interpolate(progress, [0, 1], [0, 0.2], Extrapolation.CLAMP),
+    };
+  });
+
+  const contentLiftStyle = useAnimatedStyle(() => {
+    if (Math.abs(keyboardLift.value) < 0.5) return {};
+    return { transform: [{ translateY: -keyboardLift.value }] };
+  });
 
   const handleInputFocus = useCallback(() => {
     setInputFocused(true);
@@ -582,130 +694,295 @@ export function StoryViewerScreen({ userId }: StoryViewerScreenProps) {
     goNextItem('tap_forward');
   }, [dismissReplyKeyboard, goNextItem, inputFocused]);
 
-  const panGesture = Gesture.Pan()
-    .activeOffsetX([-16, 16])
-    .activeOffsetY([-20, 20])
-    .onUpdate((e) => {
-      if (insightsOpen.value || isMediaZoomed.value === 1) return;
+  /**
+   * Jest işleyicileri UI thread'de çalışır; bu yüzden JS tarafındaki güncel
+   * geri çağrıları bir ref üzerinden okurlar. Böylece `panGesture` her render'da
+   * yeniden kurulmaz — hikâye süresi ilerlerken (fotoğrafta saniyede 20 kez)
+   * jest yeniden bağlanmadığı için sürüklemede takılma/titreme olmaz.
+   */
+  const gestureCallbacksRef = useRef({
+    dismiss: () => {},
+    nextUser: () => {},
+    prevUser: () => {},
+    insights: () => {},
+    singleLink: () => {},
+    tapBack: () => {},
+    tapForward: () => {},
+    resume: () => {},
+    pressStart: () => {},
+    pressEnd: () => {},
+    dragStart: () => {},
+    dragEnd: () => {},
+  });
 
-      const absX = Math.abs(e.translationX);
-      const absY = Math.abs(e.translationY);
+  gestureCallbacksRef.current = {
+    dismiss: closeViewer,
+    nextUser: finishPanNextUser,
+    prevUser: finishPanPrevUser,
+    insights: () => void openInsights(),
+    singleLink: () => openSingleStoryLink(),
+    tapBack: handleTapBack,
+    tapForward: handleTapForward,
+    resume: resumePlaybackIfAllowed,
+    pressStart: () => setIsPaused(true),
+    pressEnd: resumePlaybackIfAllowed,
+    dragStart: () => setDragging(true),
+    dragEnd: () => setDragging(false),
+  };
 
-      if (e.translationY > 0 && absY > absX * 1.15) {
-        dismissY.value = e.translationY;
-        panX.value = 0;
-        return;
-      }
+  // Kimliği hiç değişmeyen dağıtıcılar: jest worklet'leri bunları yakalar.
+  const dispatch = useMemo(
+    () => ({
+      dismiss: () => gestureCallbacksRef.current.dismiss(),
+      nextUser: () => gestureCallbacksRef.current.nextUser(),
+      prevUser: () => gestureCallbacksRef.current.prevUser(),
+      insights: () => gestureCallbacksRef.current.insights(),
+      singleLink: () => gestureCallbacksRef.current.singleLink(),
+      tapBack: () => gestureCallbacksRef.current.tapBack(),
+      tapForward: () => gestureCallbacksRef.current.tapForward(),
+      resume: () => gestureCallbacksRef.current.resume(),
+      pressStart: () => gestureCallbacksRef.current.pressStart(),
+      pressEnd: () => gestureCallbacksRef.current.pressEnd(),
+      dragStart: () => gestureCallbacksRef.current.dragStart(),
+      dragEnd: () => gestureCallbacksRef.current.dragEnd(),
+    }),
+    [],
+  );
 
-      if (absX > absY * 0.82) {
-        dismissY.value = 0;
-        let tx = e.translationX;
-        if (canGoNextUserSv.value === 0 && tx < 0) tx *= 0.22;
-        if (canGoPrevUserSv.value === 0 && tx > 0) tx *= 0.22;
-        panX.value = tx;
-      }
-    })
-    .onEnd((e) => {
-      if (insightsOpen.value || isMediaZoomed.value === 1) {
-        if (isMediaZoomed.value === 1) {
+  const panGesture = useMemo(
+    () =>
+      Gesture.Pan()
+        // Aktivasyon eşiği küçük: parmak kalkar kalkmaz takip başlar (IG hissi).
+        .activeOffsetX([-14, 14])
+        .activeOffsetY([-12, 12])
+        .onBegin(() => {
+          dragAxis.value = AXIS_NONE;
+          // Kapatma animasyonu sürerken yeni dokunuş onu kesmesin.
+          if (dismissingSv.value === 1) return;
+          // Önceki animasyon yarım kaldıysa kaldığı yerden devam et (sıçrama yok).
+          dragStartY.value = Math.max(0, dismissY.value);
+          cancelAnimation(dismissY);
+        })
+        .onUpdate((e) => {
+          if (dismissingSv.value === 1) return;
+          if (insightsOpen.value || isMediaZoomed.value === 1) return;
+
+          const absX = Math.abs(e.translationX);
+          const absY = Math.abs(e.translationY);
+
+          // Eksen bir kez kilitlenir: parmak titremesi yön değiştirip
+          // kartın 0'a sıçramasına (geri sarma) yol açmaz.
+          if (dragAxis.value === AXIS_NONE) {
+            if (absY > absX * 1.15) {
+              dragAxis.value = e.translationY > 0 ? AXIS_DOWN : AXIS_UP;
+            } else if (absX > absY * 1.15) {
+              dragAxis.value = AXIS_HORIZONTAL;
+            } else {
+              return;
+            }
+          }
+
+          if (dragAxis.value === AXIS_DOWN) {
+            dismissY.value = Math.max(0, dragStartY.value + e.translationY);
+            panX.value = 0;
+            return;
+          }
+
+          if (dragAxis.value === AXIS_UP) {
+            // Yarım kalmış aşağı çekme varsa yukarı savururken yumuşakça geri dön.
+            if (dismissY.value > 0.5) dismissY.value = withSpring(0, STORY_DISMISS_SPRING);
+            return;
+          }
+
+          if (dragAxis.value === AXIS_HORIZONTAL) {
+            dismissY.value = 0;
+            let tx = e.translationX;
+            if (canGoNextUserSv.value === 0 && tx < 0) tx *= 0.22;
+            if (canGoPrevUserSv.value === 0 && tx > 0) tx *= 0.22;
+            panX.value = tx;
+          }
+        })
+        .onStart(() => {
+          // Gerçek sürükleme başladı: süre dursun (IG davranışı).
+          runOnJS(dispatch.dragStart)();
+        })
+        .onEnd((e) => {
+          if (dismissingSv.value === 1) return;
+          const axis = dragAxis.value;
+          dragAxis.value = AXIS_NONE;
+
+          if (insightsOpen.value || isMediaZoomed.value === 1) {
+            runOnJS(dispatch.dragEnd)();
+            if (isMediaZoomed.value === 1) {
+              panX.value = withSpring(0, STORY_SPRING);
+              dismissY.value = withSpring(0, STORY_SPRING);
+            }
+            return;
+          }
+
+          const absX = Math.abs(e.translationX);
+          const absY = Math.abs(e.translationY);
+
+          // Aşağı çekip bırakma → hız kadar hızlı kapanış.
+          if (axis === AXIS_DOWN && shouldDismissOnRelease(dismissY.value, e.velocityY)) {
+            dismissingSv.value = 1;
+            const duration = dismissCloseDuration(dismissY.value, SCREEN_HEIGHT, e.velocityY);
+            dismissY.value = withTiming(
+              SCREEN_HEIGHT + 40,
+              { duration, easing: Easing.out(Easing.cubic) },
+              (finished) => {
+                if (finished) runOnJS(dispatch.dismiss)();
+              },
+            );
+            return;
+          }
+
+          if (dismissY.value > 0) {
+            // Yay parmak hızını korur: kopukluk yok, anında geri hissi yok.
+            dismissY.value = withSpring(0, {
+              ...STORY_DISMISS_SPRING,
+              velocity: e.velocityY,
+            });
+          }
+          runOnJS(dispatch.dragEnd)();
+
+          if (axis === AXIS_UP) {
+            const isUpFlick = e.translationY <= -SWIPE_UP_THRESHOLD;
+            if (isOwnStorySv.value === 1 && isUpFlick) {
+              runOnJS(dispatch.insights)();
+              return;
+            }
+            if (hasSingleLinkSv.value === 1 && isUpFlick) {
+              runOnJS(dispatch.singleLink)();
+              return;
+            }
+            return;
+          }
+
+          if (absX > absY * 0.82) {
+            if (e.translationX <= -SWIPE_THRESHOLD && canGoNextUserSv.value === 1) {
+              panX.value = withTiming(
+                -CARD_WIDTH,
+                { duration: STORY_USER_TRANSITION_MS, easing: Easing.out(Easing.cubic) },
+                (finished) => {
+                  if (finished) runOnJS(dispatch.nextUser)();
+                },
+              );
+              return;
+            }
+            if (e.translationX >= SWIPE_THRESHOLD && canGoPrevUserSv.value === 1) {
+              panX.value = withTiming(
+                CARD_WIDTH,
+                { duration: STORY_USER_TRANSITION_MS, easing: Easing.out(Easing.cubic) },
+                (finished) => {
+                  if (finished) runOnJS(dispatch.prevUser)();
+                },
+              );
+              return;
+            }
+          }
+
           panX.value = withSpring(0, STORY_SPRING);
-          dismissY.value = withSpring(0, STORY_SPRING);
-        }
-        return;
-      }
+        })
+        .onFinalize((_event, success) => {
+          dragAxis.value = AXIS_NONE;
+          if (!success) {
+            // İptal: yarım kalan kart ekranda kalmasın.
+            if (dismissY.value > 0) dismissY.value = withSpring(0, STORY_DISMISS_SPRING);
+            if (Math.abs(panX.value) > 0) panX.value = withSpring(0, STORY_SPRING);
+            runOnJS(dispatch.dragEnd)();
+          }
+        }),
+    [
+      canGoNextUserSv,
+      canGoPrevUserSv,
+      dismissY,
+      dismissingSv,
+      dispatch,
+      dragAxis,
+      dragStartY,
+      hasSingleLinkSv,
+      insightsOpen,
+      isMediaZoomed,
+      isOwnStorySv,
+      panX,
+    ],
+  );
 
-      const absX = Math.abs(e.translationX);
-      const absY = Math.abs(e.translationY);
+  const longPressGesture = useMemo(
+    () =>
+      Gesture.LongPress()
+        .minDuration(180)
+        .onStart(() => {
+          if (isMediaZoomed.value === 1) return;
+          // Basılı tutunca hikâye durur (IG). Jest ağacı yeniden kurulmaz.
+          runOnJS(dispatch.pressStart)();
+        })
+        .onFinalize(() => runOnJS(dispatch.pressEnd)()),
+    [dispatch, isMediaZoomed],
+  );
 
-      const isDownSwipe =
-        e.translationY >= SWIPE_DOWN_THRESHOLD ||
-        (e.translationY > 36 && e.velocityY > SWIPE_DOWN_VELOCITY);
+  const handleMediaRetry = useCallback(() => {
+    if (__DEV__) console.log('[STORY_VIEWER] Media retry', { itemKey: activeItemKey });
+    setMediaStatusEntry({ key: activeItemKey, status: 'loading' });
+    setMediaRetryToken((token) => token + 1);
+  }, [activeItemKey]);
 
-      if (isDownSwipe && absY > absX) {
-        dismissY.value = withTiming(SCREEN_HEIGHT * 0.55, { duration: 260, easing: Easing.out(Easing.cubic) }, (finished) => {
-          if (finished) runOnJS(closeViewer)();
-        });
-        return;
-      }
+  const handleMediaErrorNext = useCallback(() => {
+    goNextItem('tap_forward');
+  }, [goNextItem]);
 
-      if (dismissY.value > 0) {
-        dismissY.value = withSpring(0, STORY_SPRING);
-      }
+  const mediaRetryGesture = useMemo(
+    () =>
+      Gesture.Tap()
+        .maxDistance(14)
+        .onEnd(() => {
+          runOnJS(handleMediaRetry)();
+        }),
+    [handleMediaRetry],
+  );
 
-      if (isOwnStorySv.value === 1 && e.translationY <= -SWIPE_UP_THRESHOLD && absY > absX) {
-        runOnJS(openInsights)();
-        panX.value = withSpring(0, STORY_SPRING);
-        return;
-      }
+  const mediaNextGesture = useMemo(
+    () =>
+      Gesture.Tap()
+        .maxDistance(14)
+        .onEnd(() => {
+          runOnJS(handleMediaErrorNext)();
+        }),
+    [handleMediaErrorNext],
+  );
 
-      if (
-        isOwnStorySv.value === 0 &&
-        hasSingleLinkSv.value === 1 &&
-        e.translationY <= -SWIPE_UP_THRESHOLD &&
-        absY > absX
-      ) {
-        runOnJS(openSingleStoryLink)();
-        panX.value = withSpring(0, STORY_SPRING);
-        return;
-      }
+  const tapNavGesture = useMemo(
+    () =>
+      Gesture.Tap()
+        .maxDistance(14)
+        // Hata butonlarına dokunuş sayfa geçişi olarak da algılanmasın.
+        .requireExternalGestureToFail(mediaRetryGesture, mediaNextGesture)
+        .onEnd((e) => {
+          if (insightsOpen.value) return;
+          if (isMediaZoomed.value === 1) {
+            runOnJS(resetZoom)();
+            return;
+          }
+          if (e.x < CARD_WIDTH * 0.38) {
+            runOnJS(dispatch.tapBack)();
+          } else {
+            runOnJS(dispatch.tapForward)();
+          }
+        }),
+    [dispatch, insightsOpen, isMediaZoomed, mediaNextGesture, mediaRetryGesture, resetZoom],
+  );
 
-      if (absX > absY * 0.82) {
-        if (e.translationX <= -SWIPE_THRESHOLD && canGoNextUserSv.value === 1) {
-          panX.value = withTiming(
-            -CARD_WIDTH,
-            { duration: STORY_USER_TRANSITION_MS, easing: Easing.out(Easing.cubic) },
-            (finished) => {
-              if (finished) runOnJS(finishPanNextUser)();
-            },
-          );
-          return;
-        }
-        if (e.translationX >= SWIPE_THRESHOLD && canGoPrevUserSv.value === 1) {
-          panX.value = withTiming(
-            CARD_WIDTH,
-            { duration: STORY_USER_TRANSITION_MS, easing: Easing.out(Easing.cubic) },
-            (finished) => {
-              if (finished) runOnJS(finishPanPrevUser)();
-            },
-          );
-          return;
-        }
-        panX.value = withSpring(0, STORY_SPRING);
-        return;
-      }
-
-      panX.value = withSpring(0, STORY_SPRING);
-    });
-
-  const longPressGesture = Gesture.LongPress()
-    .minDuration(180)
-    .onStart(() => {
-      if (isMediaZoomed.value === 1) return;
-      runOnJS(setIsPaused)(true);
-    })
-    .onFinalize(() => runOnJS(resumePlaybackIfAllowed)());
-
-  const tapNavGesture = Gesture.Tap()
-    .maxDistance(14)
-    .onEnd((e) => {
-      if (insightsOpen.value) return;
-      if (isMediaZoomed.value === 1) {
-        resetZoom();
-        return;
-      }
-      if (e.x < CARD_WIDTH * 0.38) {
-        runOnJS(handleTapBack)();
-      } else {
-        runOnJS(handleTapForward)();
-      }
-    });
-
-  const composedGesture = Gesture.Simultaneous(
-    panGesture,
-    longPressGesture,
-    pinchGesture,
-    zoomPanGesture,
-    Gesture.Exclusive(doubleTapGesture, tapNavGesture),
+  const composedGesture = useMemo(
+    () =>
+      Gesture.Simultaneous(
+        panGesture,
+        longPressGesture,
+        pinchGesture,
+        zoomPanGesture,
+        Gesture.Exclusive(doubleTapGesture, tapNavGesture),
+      ),
+    [doubleTapGesture, longPressGesture, panGesture, pinchGesture, tapNavGesture, zoomPanGesture],
   );
 
   const handleReply = async (text: string) => {
@@ -740,56 +1017,87 @@ export function StoryViewerScreen({ userId }: StoryViewerScreenProps) {
     navigateToPublicProfile({ userId: bundle.authorId });
   }, [bundle?.authorId]);
 
-  const handleDeleteStory = useCallback(() => {
-    if (!user?.id || !activeItem || !bundle) return;
+  const openDeleteConfirm = useCallback(() => {
+    if (!user?.id || !activeItem || !bundle || deletingStory) return;
+    setDeleteError(null);
+    setIsPaused(true);
+    setDeleteConfirmVisible(true);
+  }, [activeItem, bundle, deletingStory, user?.id]);
 
-    const isLastItem = items.length <= 1;
-    Alert.alert(
-      isLastItem ? 'Hikayeyi Kaldır' : 'Kareyi Sil',
-      isLastItem
-        ? 'Hikayeniz tamamen kaldırılacak. Devam edilsin mi?'
-        : 'Bu hikaye karesi kaldırılacak. Devam edilsin mi?',
-      [
-        { text: 'Vazgeç', style: 'cancel', onPress: () => setIsPaused(false) },
-        {
-          text: 'Sil',
-          style: 'destructive',
-          onPress: () => {
-            void (async () => {
-              setIsPaused(true);
-              const result = await deleteStoryItem(activeItem.id);
+  const cancelDeleteConfirm = useCallback(() => {
+    if (deletingStory) return;
+    setDeleteConfirmVisible(false);
+    setDeleteError(null);
+    setIsPaused(false);
+  }, [deletingStory]);
 
-              if (result.error) {
-                Alert.alert('Silinemedi', result.error);
-                setIsPaused(false);
-                return;
-              }
+  const confirmDeleteStory = useCallback(() => {
+    if (!user?.id || !activeItem || !bundle || deletingStory) return;
 
-              const remaining = items.filter((item) => item.id !== activeItem.id);
-              if (remaining.length === 0) {
-                await prefetchStoryRings(user.id, { background: true });
-                router.back();
-                return;
-              }
+    void (async () => {
+      setDeletingStory(true);
+      setDeleteError(null);
+      const result = await deleteStoryItem(activeItem.id);
 
-              setBundle(activeUserId, { ...bundle, items: remaining });
-              setCurrentItemIndex(Math.min(currentItemIndex, remaining.length - 1));
-              setIsPaused(false);
+      if (result.error) {
+        setDeleteError(result.error);
+        setDeletingStory(false);
+        return;
+      }
 
-              void prefetchStoryRings(user.id, { background: true });
-            })();
-          },
-        },
-      ],
-    );
+      setDeleteConfirmVisible(false);
+      const remaining = items.filter((item) => item.id !== activeItem.id);
+      if (remaining.length === 0) {
+        const hasNextUser = currentUserIndex < ringUserIds.length - 1;
+        const hasPrevUser = currentUserIndex > 0;
+
+        if (hasNextUser) {
+          setCurrentUserIndex(currentUserIndex + 1);
+          setCurrentItemIndex(0);
+          setDeletingStory(false);
+          setIsPaused(false);
+          void prefetchStoryRings(user.id, { background: true });
+          return;
+        }
+
+        if (hasPrevUser) {
+          const prevUserId = ringUserIds[currentUserIndex - 1];
+          const prevBundle = useStoryViewerStore.getState().bundles[prevUserId];
+          const lastIndex = Math.max(0, (prevBundle?.items.length ?? 1) - 1);
+          setCurrentUserIndex(currentUserIndex - 1);
+          setCurrentItemIndex(lastIndex);
+          setDeletingStory(false);
+          setIsPaused(false);
+          void prefetchStoryRings(user.id, { background: true });
+          return;
+        }
+
+        setDeletingStory(false);
+        void prefetchStoryRings(user.id, { background: true });
+        closeToFeed();
+        return;
+      }
+
+      setBundle(activeUserId, { ...bundle, items: remaining });
+      setCurrentItemIndex(Math.min(currentItemIndex, remaining.length - 1));
+      setDeletingStory(false);
+      setIsPaused(false);
+
+      void prefetchStoryRings(user.id, { background: true });
+    })();
   }, [
     activeItem,
     activeUserId,
     bundle,
     currentItemIndex,
+    currentUserIndex,
+    deletingStory,
     items,
+    ringUserIds,
     setBundle,
     setCurrentItemIndex,
+    setCurrentUserIndex,
+    closeToFeed,
     user?.id,
   ]);
 
@@ -803,6 +1111,12 @@ export function StoryViewerScreen({ userId }: StoryViewerScreenProps) {
 
   return (
     <View style={styles.root}>
+      {!shouldSkipUiBlur() && Platform.OS === 'ios' ? (
+        <Animated.View pointerEvents="none" style={[styles.backdropBlur, blurBackdropStyle]}>
+          <BlurView intensity={22} tint="dark" style={StyleSheet.absoluteFill} />
+        </Animated.View>
+      ) : null}
+      <Animated.View pointerEvents="none" style={[styles.backdropDim, dismissBackdropStyle]} />
       <Animated.View
         style={[
           styles.cardStage,
@@ -827,7 +1141,7 @@ export function StoryViewerScreen({ userId }: StoryViewerScreenProps) {
           <Animated.View
             style={[
               styles.card,
-              storyCardFrameStyle.frame,
+              activeIsPhoto ? storyCardFrameStyle.frame : storyCardFrameStyle.frameVideo,
               deckStyle,
             ]}
           >
@@ -845,19 +1159,38 @@ export function StoryViewerScreen({ userId }: StoryViewerScreenProps) {
 
               <Animated.View style={[styles.mediaDeck, mediaDeckStyle]} collapsable={false}>
                 {activeItem ? (
-                  <View key={`${activeUserId}-${activeItem.id}`} style={styles.mediaFill}>
+                  <View
+                    key={`${activeUserId}-${activeItem.id}`}
+                    style={styles.mediaFill}
+                    onLayout={
+                      __DEV__
+                        ? (event) => {
+                            const { width, height } = event.nativeEvent.layout;
+                            console.log('[STORY_VIEWER] Card media layout', {
+                              itemId: activeItem.id,
+                              size: [Math.round(width), Math.round(height)],
+                            });
+                          }
+                        : undefined
+                    }
+                  >
                     <Animated.View style={[styles.mediaZoomLayer, mediaZoomStyle]} collapsable={false}>
                       <StorySlide
                         item={activeItem}
                         isActive={slideInteractive}
                         isPaused={isPaused || insightsVisible}
-                        includeTextOverlays={false}
                         onVideoPosition={handleVideoPosition}
                         onVideoEnd={handleVideoEnd}
+                        retryToken={mediaRetryToken}
+                        onMediaStatusChange={handleMediaStatusChange}
                       />
                     </Animated.View>
-                    {(activeItem.textOverlays?.length ?? 0) > 0 ? (
-                      <StoryTextOverlayView overlays={activeItem.textOverlays} />
+                    {mediaStatus === 'error' ? (
+                      <StoryMediaErrorOverlay
+                        retryGesture={mediaRetryGesture}
+                        nextGesture={mediaNextGesture}
+                        hasNext
+                      />
                     ) : null}
                   </View>
                 ) : null}
@@ -919,16 +1252,22 @@ export function StoryViewerScreen({ userId }: StoryViewerScreenProps) {
                 <View style={styles.topActions}>
                   {isOwnStory ? (
                     <Pressable
-                      onPress={() => {
-                        setIsPaused(true);
-                        handleDeleteStory();
-                      }}
-                      hitSlop={12}
+                      onPress={openDeleteConfirm}
+                      hitSlop={6}
+                      disabled={deletingStory || deleteConfirmVisible}
+                      accessibilityRole="button"
+                      accessibilityLabel="Hikayeyi sil"
                     >
                       <Ionicons name="trash-outline" size={24} color="#fff" />
                     </Pressable>
                   ) : null}
-                  <Pressable onPress={closeViewer} hitSlop={12}>
+                  <Pressable
+                    onPress={closeViewer}
+                    hitSlop={6}
+                    disabled={deleteConfirmVisible}
+                    accessibilityRole="button"
+                    accessibilityLabel="Kapat"
+                  >
                     <Ionicons name="close" size={28} color="#fff" />
                   </Pressable>
                 </View>
@@ -986,6 +1325,61 @@ export function StoryViewerScreen({ userId }: StoryViewerScreenProps) {
           }}
         />
       ) : null}
+
+      <Modal
+        visible={deleteConfirmVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={cancelDeleteConfirm}
+      >
+        <View style={styles.deleteModalRoot}>
+          <Pressable
+            style={styles.deleteModalBackdrop}
+            onPress={cancelDeleteConfirm}
+            disabled={deletingStory}
+            accessibilityLabel="İptal"
+          />
+          <View style={styles.deleteCard}>
+            <Text variant="h3" style={styles.deleteTitle}>
+              {items.length <= 1 ? 'Hikayeyi Kaldır' : 'Kareyi Sil'}
+            </Text>
+            <Text variant="body" style={styles.deleteBody}>
+              {items.length <= 1
+                ? 'Hikayeniz tamamen kaldırılacak. Devam edilsin mi?'
+                : 'Bu hikaye karesi kaldırılacak. Devam edilsin mi?'}
+            </Text>
+            {deleteError ? (
+              <Text variant="caption" style={styles.deleteError}>
+                {deleteError}
+              </Text>
+            ) : null}
+            <View style={styles.deleteActions}>
+              <Pressable
+                style={styles.deleteCancelBtn}
+                onPress={cancelDeleteConfirm}
+                disabled={deletingStory}
+              >
+                <Text variant="label" style={styles.deleteCancelText}>
+                  Vazgeç
+                </Text>
+              </Pressable>
+              <Pressable
+                style={styles.deleteConfirmBtn}
+                onPress={confirmDeleteStory}
+                disabled={deletingStory}
+              >
+                {deletingStory ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text variant="label" style={styles.deleteConfirmText}>
+                    Sil
+                  </Text>
+                )}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -993,10 +1387,20 @@ export function StoryViewerScreen({ userId }: StoryViewerScreenProps) {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
+    backgroundColor: 'transparent',
+  },
+  backdropBlur: {
+    ...StyleSheet.absoluteFill,
+    zIndex: 0,
+  },
+  backdropDim: {
+    ...StyleSheet.absoluteFill,
+    zIndex: 0,
     backgroundColor: '#000',
   },
   cardStage: {
     flex: 1,
+    zIndex: 1,
   },
   keyboardDismissBackdrop: {
     ...StyleSheet.absoluteFill,
@@ -1027,15 +1431,15 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   mediaZoomLayer: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   peekLayer: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     overflow: 'hidden',
     zIndex: 1,
   },
   transitionScrim: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: '#000',
     zIndex: 3,
   },
@@ -1055,11 +1459,11 @@ const styles = StyleSheet.create({
     paddingTop: spacing.xs,
   },
   linkOverlayHost: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     zIndex: 8,
   },
   musicOverlayHost: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     zIndex: 9,
   },
   topRow: {
@@ -1101,5 +1505,64 @@ const styles = StyleSheet.create({
     backgroundColor: '#000',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  deleteModalRoot: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.lg,
+  },
+  deleteModalBackdrop: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+  },
+  deleteCard: {
+    backgroundColor: '#1c1c1e',
+    borderRadius: 16,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.md,
+    gap: spacing.sm,
+    zIndex: 1,
+  },
+  deleteTitle: {
+    color: '#fff',
+    textAlign: 'center',
+  },
+  deleteBody: {
+    color: 'rgba(255,255,255,0.72)',
+    textAlign: 'center',
+    marginBottom: spacing.sm,
+  },
+  deleteError: {
+    color: '#ff6b6b',
+    textAlign: 'center',
+  },
+  deleteActions: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.xs,
+  },
+  deleteCancelBtn: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.md,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+  },
+  deleteCancelText: {
+    color: '#fff',
+  },
+  deleteConfirmBtn: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.md,
+    borderRadius: 12,
+    backgroundColor: '#ff3b30',
+    minHeight: 48,
+  },
+  deleteConfirmText: {
+    color: '#fff',
   },
 });

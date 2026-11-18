@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { Gesture } from 'react-native-gesture-handler';
 import {
   runOnJS,
@@ -26,8 +26,8 @@ export function useStoryViewerMediaZoom({ resetKey, enabled }: UseStoryViewerMed
   const savedTranslateY = useSharedValue(0);
   const isZoomed = useSharedValue(0);
 
-  const resetZoom = () => {
-    'worklet';
+  // Sabit kimlik: jest ağacı (tap/jest birleşimi) her render'da yeniden kurulmasın.
+  const resetZoom = useCallback(() => {
     scale.value = withTiming(MIN_ZOOM);
     savedScale.value = MIN_ZOOM;
     translateX.value = withTiming(0);
@@ -35,7 +35,7 @@ export function useStoryViewerMediaZoom({ resetKey, enabled }: UseStoryViewerMed
     savedTranslateX.value = 0;
     savedTranslateY.value = 0;
     isZoomed.value = 0;
-  };
+  }, [isZoomed, savedScale, savedTranslateX, savedTranslateY, scale, translateX, translateY]);
 
   useEffect(() => {
     scale.value = MIN_ZOOM;
@@ -128,13 +128,23 @@ export function useStoryViewerMediaZoom({ resetKey, enabled }: UseStoryViewerMed
     [enabled, isZoomed, savedScale, savedTranslateX, savedTranslateY, scale, translateX, translateY],
   );
 
-  const mediaZoomStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateX: translateX.value },
-      { translateY: translateY.value },
-      { scale: scale.value },
-    ],
-  }));
+  // Boşta (zoom yok) transform uygulanmaz: Android'de transform'lu ata, video yüzeyini
+  // ses çalarken siyah bırakabiliyor. Yalnızca gerçekten zoom/pan varken transform eklenir.
+  const mediaZoomStyle = useAnimatedStyle(() => {
+    const currentScale = scale.value;
+    const currentX = translateX.value;
+    const currentY = translateY.value;
+    const isIdentity =
+      currentScale <= 1.001 && Math.abs(currentX) < 0.5 && Math.abs(currentY) < 0.5;
+    if (isIdentity) return {};
+    return {
+      transform: [
+        { translateX: currentX },
+        { translateY: currentY },
+        { scale: currentScale },
+      ],
+    };
+  });
 
   return {
     isZoomed,
