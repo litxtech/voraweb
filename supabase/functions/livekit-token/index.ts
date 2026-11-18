@@ -89,7 +89,7 @@ serve(async (req) => {
 
       const { data: participant } = await admin
         .from('screen_share_participants')
-        .select('id')
+        .select('id, kicked_at')
         .eq('session_id', sessionId)
         .eq('user_id', userId)
         .is('left_at', null)
@@ -101,8 +101,18 @@ serve(async (req) => {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
+      if (participant.kicked_at) {
+        return new Response(JSON.stringify({ error: 'Kicked from session' }), {
+          status: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
 
       const isHost = session.host_user_id === userId;
+      // İzleyici: yalnızca mikrofon. Ekran / ekran sesi sadece host.
+      const publishSources = isHost
+        ? [TrackSource.MICROPHONE, TrackSource.SCREEN_SHARE, TrackSource.SCREEN_SHARE_AUDIO]
+        : [TrackSource.MICROPHONE];
       const at = new AccessToken(apiKey, apiSecret, {
         identity: userId,
         ttl: '2h',
@@ -112,11 +122,9 @@ serve(async (req) => {
         room: session.livekit_room_name,
         canPublish: true,
         canSubscribe: true,
-        canPublishSources: [
-          TrackSource.MICROPHONE,
-          TrackSource.SCREEN_SHARE,
-          TrackSource.SCREEN_SHARE_AUDIO,
-        ],
+        canPublishData: true,
+        canUpdateOwnMetadata: isHost,
+        canPublishSources: publishSources,
       });
 
       const token = await at.toJwt();
@@ -126,6 +134,7 @@ serve(async (req) => {
           url: livekitUrl,
           roomName: session.livekit_room_name,
           canPublish: true,
+          canPublishScreen: isHost,
           isHost,
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },

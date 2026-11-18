@@ -1,0 +1,92 @@
+import type { ScreenShareSession } from '@/features/screen-share/types';
+
+/** Hub’da cam pencere tasarımını dolduran örnek odalar (gerçek LiveKit odası değil). */
+export const SCREEN_SHARE_SAMPLE_ROOMS: ScreenShareSession[] = [
+  {
+    id: 'demo-ss-film-night',
+    joinCode: '482913',
+    livekitRoomName: 'demo_ss_film',
+    hostUserId: 'demo-host-1',
+    title: 'Film gecesi · Dizi',
+    status: 'live',
+    participantCount: 7,
+    createdAt: new Date().toISOString(),
+    endedAt: null,
+    hasPassword: false,
+    isHost: false,
+    hostUsername: 'elif',
+    hostAvatarUrl: null,
+    coverImageUrl: null,
+    previewMembers: [
+      { userId: 'demo-u1', username: 'elif', avatarUrl: null },
+      { userId: 'demo-u2', username: 'mert', avatarUrl: null },
+      { userId: 'demo-u3', username: 'ayse', avatarUrl: null },
+    ],
+  },
+  {
+    id: 'demo-ss-kahve-sohbet',
+    joinCode: '715591',
+    livekitRoomName: 'demo_ss_kahve',
+    hostUserId: 'demo-host-2',
+    title: 'Kahve & sohbet',
+    status: 'live',
+    participantCount: 3,
+    createdAt: new Date().toISOString(),
+    endedAt: null,
+    hasPassword: true,
+    isHost: false,
+    hostUsername: 'deniz',
+    hostAvatarUrl: null,
+    coverImageUrl: null,
+    previewMembers: [
+      { userId: 'demo-u4', username: 'deniz', avatarUrl: null },
+      { userId: 'demo-u5', username: 'can', avatarUrl: null },
+      { userId: 'demo-u6', username: 'selin', avatarUrl: null },
+    ],
+  },
+  {
+    id: 'demo-ss-mac-izle',
+    joinCode: '904217',
+    livekitRoomName: 'demo_ss_mac',
+    hostUserId: 'demo-host-3',
+    title: 'Maç izleme odası',
+    status: 'live',
+    participantCount: 12,
+    createdAt: new Date().toISOString(),
+    endedAt: null,
+    hasPassword: false,
+    isHost: false,
+    hostUsername: 'burak',
+    hostAvatarUrl: null,
+    coverImageUrl: null,
+    previewMembers: [
+      { userId: 'demo-u7', username: 'burak', avatarUrl: null },
+      { userId: 'demo-u8', username: 'zeynep', avatarUrl: null },
+      { userId: 'demo-u9', username: 'emre', avatarUrl: null },
+    ],
+  },
+  {
+    id: 'demo-ss-calisma',
+    joinCode: '155308',
+    livekitRoomName: 'demo_ss_study',
+    hostUserId: 'demo-host-4',
+    title: 'Sessiz çalışma',
+    status: 'live',
+    participantCount: 2,
+    createdAt: new Date().toISOString(),
+    endedAt: null,
+    hasPassword: true,
+    isHost: false,
+    hostUsername: 'ada',
+    hostAvatarUrl: null,
+    coverImageUrl: null,
+    previewMembers: [
+      { userId: 'demo-u10', username: 'ada', avatarUrl: null },
+      { userId: 'demo-u11', username: 'kaan', avatarUrl: null },
+    ],
+  },
+];
+
+export function isScreenShareSampleRoomId(id: string): boolean {
+  return id.startsWith('demo-ss-');
+}

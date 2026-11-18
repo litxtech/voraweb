@@ -1,64 +1,194 @@
-import { ScrollView, StyleSheet, View } from 'react-native';
-import { useParticipants } from '@livekit/react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useParticipants, useRoomContext } from '@livekit/react-native';
+import { RoomEvent } from 'livekit-client';
+import { OptimizedImage } from '@/components/media/OptimizedImage';
 import { Text } from '@/components/ui/Text';
 import { SCREEN_SHARE_ACCENT } from '@/features/screen-share/constants';
+import { listScreenShareParticipants } from '@/features/screen-share/services/screenShareSessionService';
+import type { ScreenShareParticipant } from '@/features/screen-share/types';
 import { spacing } from '@/constants/theme';
-import { useTheme } from '@/providers/ThemeProvider';
 
-/** Canlı odadaki katılımcı chip listesi (konuşan vurgulu). */
-export function ScreenSharePresence() {
-  const { colors } = useTheme();
-  const participants = useParticipants();
+type Props = {
+  sessionId: string;
+  /** true: video üzerine yarı saydam şerit */
+  overlay?: boolean;
+  onAvatarPress: (participant: ScreenShareParticipant) => void;
+};
+
+/** İzleyen / konuşan avatar şeridi — tıklanınca profil kartı açılır. */
+export function ScreenSharePresence({ sessionId, overlay = false, onAvatarPress }: Props) {
+  const room = useRoomContext();
+  const liveParticipants = useParticipants();
+  const [members, setMembers] = useState<ScreenShareParticipant[]>([]);
+
+  const speakingIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const p of liveParticipants) {
+      if (p.isSpeaking) ids.add(p.identity);
+    }
+    return ids;
+  }, [liveParticipants]);
+
+  const refresh = useCallback(async () => {
+    try {
+      const rows = await listScreenShareParticipants(sessionId);
+      setMembers(rows.filter((m) => m.isOnline && !m.kickedAt));
+    } catch {
+      // sessiz — LiveKit listesi yedek
+    }
+  }, [sessionId]);
+
+  // Sürekli poll yok — yalnızca giriş + LiveKit join/leave (fatura).
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  useEffect(() => {
+    if (!room) return;
+    const bump = () => void refresh();
+    room.on(RoomEvent.ParticipantConnected, bump);
+    room.on(RoomEvent.ParticipantDisconnected, bump);
+    return () => {
+      room.off(RoomEvent.ParticipantConnected, bump);
+      room.off(RoomEvent.ParticipantDisconnected, bump);
+    };
+  }, [room, refresh]);
+
+  const ordered = useMemo(() => {
+    const copy = [...members];
+    copy.sort((a, b) => {
+      const aSpeak = speakingIds.has(a.userId) ? 1 : 0;
+      const bSpeak = speakingIds.has(b.userId) ? 1 : 0;
+      if (aSpeak !== bSpeak) return bSpeak - aSpeak;
+      if (a.isHost !== b.isHost) return a.isHost ? -1 : 1;
+      return a.username.localeCompare(b.username, 'tr');
+    });
+    return copy;
+  }, [members, speakingIds]);
+
+  if (ordered.length === 0) {
+    return null;
+  }
 
   return (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      contentContainerStyle={styles.row}
-    >
-      {participants.map((p) => {
-        const speaking = p.isSpeaking;
-        const name = p.name || p.identity.slice(0, 8);
-        return (
-          <View
-            key={p.sid}
-            style={[
-              styles.chip,
-              {
-                backgroundColor: speaking ? `${SCREEN_SHARE_ACCENT}28` : colors.surfaceElevated,
-                borderColor: speaking ? SCREEN_SHARE_ACCENT : colors.border,
-              },
-            ]}
-          >
-            <View
-              style={[
-                styles.dot,
-                { backgroundColor: speaking ? SCREEN_SHARE_ACCENT : colors.textMuted },
-              ]}
-            />
-            <Text
-              numberOfLines={1}
-              style={{ color: colors.text, fontSize: 12, fontWeight: '600', maxWidth: 88 }}
+    <View style={[styles.wrap, overlay ? styles.overlayWrap : null]} pointerEvents="box-none">
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.row}
+        keyboardShouldPersistTaps="handled"
+      >
+        {ordered.map((member) => {
+          const speaking = speakingIds.has(member.userId);
+          const initial = (member.username || '?').slice(0, 1).toUpperCase();
+          return (
+            <Pressable
+              key={member.userId}
+              onPress={() => onAvatarPress(member)}
+              accessibilityRole="button"
+              accessibilityLabel={`@${member.username} profili`}
+              style={({ pressed }) => [styles.item, { opacity: pressed ? 0.85 : 1 }]}
             >
-              {name}
-            </Text>
-          </View>
-        );
-      })}
-    </ScrollView>
+              <View
+                style={[
+                  styles.ring,
+                  {
+                    borderColor: speaking ? SCREEN_SHARE_ACCENT : 'rgba(255,255,255,0.35)',
+                    borderWidth: speaking ? 2.5 : 1.5,
+                  },
+                ]}
+              >
+                {member.avatarUrl ? (
+                  <OptimizedImage
+                    uri={member.avatarUrl}
+                    style={styles.avatar}
+                    tier="avatar"
+                    recyclingKey={`ss-av-${member.userId}`}
+                  />
+                ) : (
+                  <View style={styles.fallback}>
+                    <Text style={styles.initial}>{initial}</Text>
+                  </View>
+                )}
+                {speaking ? <View style={styles.micDot} /> : null}
+              </View>
+              <Text style={styles.name} numberOfLines={1}>
+                {member.isHost ? 'Host' : `@${member.username}`}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+    </View>
   );
 }
 
+const AVATAR = 44;
+
 const styles = StyleSheet.create({
-  row: { gap: spacing.sm, paddingVertical: 2 },
-  chip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    borderWidth: 1,
+  wrap: {
+    paddingVertical: 2,
   },
-  dot: { width: 7, height: 7, borderRadius: 4 },
+  overlayWrap: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 12,
+    paddingHorizontal: spacing.sm,
+    zIndex: 4,
+  },
+  row: {
+    gap: spacing.md,
+    paddingHorizontal: spacing.sm,
+    alignItems: 'center',
+  },
+  item: {
+    alignItems: 'center',
+    gap: 4,
+    width: 64,
+  },
+  ring: {
+    width: AVATAR + 6,
+    height: AVATAR + 6,
+    borderRadius: (AVATAR + 6) / 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.35)',
+  },
+  avatar: {
+    width: AVATAR,
+    height: AVATAR,
+    borderRadius: AVATAR / 2,
+  },
+  fallback: {
+    width: AVATAR,
+    height: AVATAR,
+    borderRadius: AVATAR / 2,
+    backgroundColor: `${SCREEN_SHARE_ACCENT}40`,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  initial: { color: '#fff', fontWeight: '800', fontSize: 16 },
+  micDot: {
+    position: 'absolute',
+    right: 0,
+    bottom: 0,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: SCREEN_SHARE_ACCENT,
+    borderWidth: 2,
+    borderColor: '#05070A',
+  },
+  name: {
+    color: '#E8EEF5',
+    fontSize: 10,
+    fontWeight: '700',
+    textShadowColor: 'rgba(0,0,0,0.8)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+    maxWidth: 64,
+    textAlign: 'center',
+  },
 });

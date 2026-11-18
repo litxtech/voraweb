@@ -1,23 +1,38 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, AppState, Share, StyleSheet, View } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { AudioSession, LiveKitRoom, registerGlobals } from '@livekit/react-native';
-import { router } from 'expo-router';
+import { router, useNavigation } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text } from '@/components/ui/Text';
 import { SCREEN_SHARE_ACCENT } from '@/features/screen-share/constants';
+import { ScreenSharePasswordSheet } from '@/features/screen-share/components/ScreenSharePasswordSheet';
 import { ScreenShareRoomBody } from '@/features/screen-share/components/ScreenShareRoomBody';
 import {
-  endScreenShareSession,
+  deleteScreenShareSession,
   fetchLiveKitScreenShareToken,
   fetchScreenShareSession,
   joinScreenShareSession,
   leaveScreenShareSession,
+  requestScreenShareInvite,
+  ScreenSharePasswordRequiredError,
 } from '@/features/screen-share/services/screenShareSessionService';
+import { configureScreenShareAudioSession } from '@/features/screen-share/services/screenShareAudioSession';
+import { clearScreenShareIntent } from '@/features/screen-share/services/screenShareIntentStore';
 import type { ScreenShareSession } from '@/features/screen-share/types';
 import { spacing } from '@/constants/theme';
 import { useAuth } from '@/providers/AuthProvider';
 import { ensureDomEventShim } from '@/lib/shims/domEvent';
+
+/**
+ * stopLocalTrackOnUnpublish: false — reconnect/unpublish sırasında Android
+ * MediaProjection track'ini öldürme; keep-alive yeniden publish eder.
+ */
+const LIVEKIT_ROOM_OPTIONS = {
+  adaptiveStream: false,
+  dynacast: false,
+  stopLocalTrackOnUnpublish: false,
+} as const;
 
 let globalsRegistered = false;
 
@@ -32,42 +47,72 @@ type TokenBundle = {
 
 export function ScreenShareSessionScreen({ sessionId }: Props) {
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation();
   const { user } = useAuth();
   const [session, setSession] = useState<ScreenShareSession | null>(null);
   const [tokenBundle, setTokenBundle] = useState<TokenBundle | null>(null);
   const [loading, setLoading] = useState(true);
-  const hasRoomRef = useRef(false);
+  const [joinPasswordOpen, setJoinPasswordOpen] = useState(false);
+  const [joinBusy, setJoinBusy] = useState(false);
+  const [inviteBusy, setInviteBusy] = useState(false);
+  const [pendingJoinCode, setPendingJoinCode] = useState('');
+  const joinedRef = useRef(false);
+  const leftRef = useRef(false);
+  const roomOptions = useMemo(() => LIVEKIT_ROOM_OPTIONS, []);
+
+  const leavePresence = useCallback(async () => {
+    if (leftRef.current || !joinedRef.current) return;
+    leftRef.current = true;
+    joinedRef.current = false;
+    await leaveScreenShareSession(sessionId).catch(() => undefined);
+  }, [sessionId]);
+
+  const finishBoot = async (next: ScreenShareSession) => {
+    setSession(next);
+    const tk = await fetchLiveKitScreenShareToken(sessionId);
+    setTokenBundle({
+      token: tk.token,
+      url: tk.url,
+      canPublish: tk.canPublish,
+      isHost: tk.isHost,
+    });
+    joinedRef.current = true;
+    leftRef.current = false;
+  };
 
   useEffect(() => {
     let cancelled = false;
+    leftRef.current = false;
+    joinedRef.current = false;
 
     const boot = async () => {
       ensureDomEventShim();
-      // LiveKitRoom bir kez mount olduktan sonra loading=true yapma → connect abort olmasın.
-      if (!hasRoomRef.current) setLoading(true);
+      setLoading(true);
       try {
         if (!globalsRegistered) {
           registerGlobals();
           globalsRegistered = true;
         }
-        await AudioSession.startAudioSession();
+        await configureScreenShareAudioSession();
 
-        let next = await fetchScreenShareSession(sessionId);
-        if (!next || next.status !== 'live') {
-          throw new Error('Oda bulunamadı veya kapandı');
+        const fetched = await fetchScreenShareSession(sessionId);
+        if (!fetched || fetched.status !== 'live') {
+          throw new Error('Oda bulunamadı veya sona erdi');
         }
-        next = await joinScreenShareSession(next.joinCode);
-        if (cancelled) return;
-        setSession(next);
-        const tk = await fetchLiveKitScreenShareToken(sessionId);
-        if (cancelled) return;
-        setTokenBundle({
-          token: tk.token,
-          url: tk.url,
-          canPublish: tk.canPublish,
-          isHost: tk.isHost,
-        });
-        hasRoomRef.current = true;
+        try {
+          const next = await joinScreenShareSession(fetched.joinCode);
+          if (cancelled) return;
+          await finishBoot(next);
+        } catch (err) {
+          if (err instanceof ScreenSharePasswordRequiredError) {
+            if (cancelled) return;
+            setSession(fetched);
+            setPendingJoinCode(fetched.joinCode);
+            setJoinPasswordOpen(true);
+            return;
+          }
+          throw err;
+        }
       } catch (err) {
         if (cancelled) return;
         Alert.alert('Sesli oda', err instanceof Error ? err.message : 'Bağlanılamadı', [
@@ -80,20 +125,67 @@ export function ScreenShareSessionScreen({ sessionId }: Props) {
 
     void boot();
 
+    // ÖNEMLİ: cleanup'ta leave / AudioSession.stop YOK.
+    // HMR / Strict Mode / kısa unmount reconnect fırtınası + WS 1000 üretir;
+    // MediaProjection track'i de ölür. Gerçek çıkış beforeRemove / onLeave'de.
     return () => {
       cancelled = true;
-      void leaveScreenShareSession(sessionId).catch(() => undefined);
-      void AudioSession.stopAudioSession().catch(() => undefined);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
+
+  useEffect(() => {
+    const sub = navigation.addListener('beforeRemove', () => {
+      clearScreenShareIntent();
+      void leavePresence();
+      void AudioSession.stopAudioSession().catch(() => undefined);
+    });
+    return sub;
+  }, [navigation, leavePresence]);
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
       if (state !== 'active') return;
-      void AudioSession.startAudioSession().catch(() => undefined);
+      void configureScreenShareAudioSession().catch(() => undefined);
     });
     return () => sub.remove();
   }, []);
+
+  const onPasswordJoin = async (password: string | null) => {
+    if (!password) {
+      Alert.alert('Şifre', 'Bu oda için şifre gerekli');
+      return;
+    }
+    setJoinBusy(true);
+    try {
+      const next = await joinScreenShareSession(pendingJoinCode, password);
+      setJoinPasswordOpen(false);
+      // LiveKitRoom'u sökme — token yokken zaten spinner; token gelince mount olur.
+      setLoading(true);
+      await finishBoot(next);
+    } catch (err) {
+      Alert.alert('Katıl', err instanceof Error ? err.message : 'Giriş başarısız');
+    } finally {
+      setJoinBusy(false);
+      setLoading(false);
+    }
+  };
+
+  const onRequestInvite = async () => {
+    if (!pendingJoinCode) return;
+    setInviteBusy(true);
+    try {
+      await requestScreenShareInvite(pendingJoinCode);
+      setJoinPasswordOpen(false);
+      Alert.alert('Davet isteği', 'Host’a bildirildi. Kabul edilince tekrar dene.', [
+        { text: 'Tamam', onPress: () => router.replace('/screen-share') },
+      ]);
+    } catch (err) {
+      Alert.alert('Davet', err instanceof Error ? err.message : 'İstek gönderilemedi');
+    } finally {
+      setInviteBusy(false);
+    }
+  };
 
   const onCopyCode = async () => {
     if (!session) return;
@@ -104,18 +196,22 @@ export function ScreenShareSessionScreen({ sessionId }: Props) {
   };
 
   const onLeave = async () => {
-    await leaveScreenShareSession(sessionId).catch(() => undefined);
+    clearScreenShareIntent();
+    await leavePresence();
     void AudioSession.stopAudioSession().catch(() => undefined);
     router.replace('/screen-share');
   };
 
-  const onEnd = async () => {
-    await endScreenShareSession(sessionId).catch(() => undefined);
+  const onDelete = async () => {
+    clearScreenShareIntent();
+    leftRef.current = true;
+    joinedRef.current = false;
+    await deleteScreenShareSession(sessionId).catch(() => undefined);
     void AudioSession.stopAudioSession().catch(() => undefined);
     router.replace('/screen-share');
   };
 
-  if (loading || !session || !tokenBundle) {
+  if ((loading || !session || !tokenBundle) && !joinPasswordOpen) {
     return (
       <View style={[styles.centered, { backgroundColor: '#05070A', paddingTop: insets.top }]}>
         <ActivityIndicator color={SCREEN_SHARE_ACCENT} />
@@ -126,28 +222,48 @@ export function ScreenShareSessionScreen({ sessionId }: Props) {
     );
   }
 
+  if (joinPasswordOpen) {
+    return (
+      <View style={[styles.centered, { backgroundColor: '#05070A', paddingTop: insets.top }]}>
+        <ScreenSharePasswordSheet
+          visible
+          title="Oda şifresi gerekli"
+          subtitle="Şifreyi biliyorsan gir. Bilmiyorsan host’tan davet iste."
+          confirmLabel="Giriş yap"
+          busy={joinBusy}
+          inviteBusy={inviteBusy}
+          onRequestInvite={() => void onRequestInvite()}
+          onClose={() => router.replace('/screen-share')}
+          onSubmit={(password) => void onPasswordJoin(password)}
+        />
+      </View>
+    );
+  }
+
+  if (!session || !tokenBundle) {
+    return null;
+  }
+
   const isHost = tokenBundle.isHost || session.hostUserId === user?.id;
 
   return (
     <View style={[styles.root, { backgroundColor: '#05070A', paddingTop: insets.top }]}>
       <LiveKitRoom
+        key={tokenBundle.token}
         serverUrl={tokenBundle.url}
         token={tokenBundle.token}
         connect
         audio
         video={false}
-        options={{
-          adaptiveStream: false,
-          dynacast: true,
-          stopLocalTrackOnUnpublish: true,
-        }}
+        options={roomOptions}
       >
         <ScreenShareRoomBody
           session={session}
           isHost={isHost}
           onCopyCode={() => void onCopyCode()}
           onLeave={() => void onLeave()}
-          onEnd={() => void onEnd()}
+          onDelete={() => void onDelete()}
+          onSessionPatch={setSession}
         />
       </LiveKitRoom>
     </View>

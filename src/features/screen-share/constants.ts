@@ -12,16 +12,22 @@ export const SCREEN_SHARE_DRM_HINT =
 export const SCREEN_SHARE_HUB_ROUTE = '/screen-share';
 export const screenShareSessionPath = (sessionId: string) => `/screen-share/${sessionId}` as const;
 
-/** Akıcı izleme: 720p / 15fps / düşük bitrate — donmayı azaltır */
+/** Akıcı izleme: motion + orta bitrate — donma/titreme azaltır */
 export const SCREEN_SHARE_CAPTURE = {
-  resolution: { width: 1280, height: 720, frameRate: 15 },
-  contentHint: 'detail' as const,
+  resolution: { width: 1280, height: 720, frameRate: 18 },
+  contentHint: 'motion' as const,
 };
 
 export const SCREEN_SHARE_PUBLISH = {
   videoCodec: 'h264' as const,
   screenShareEncoding: {
-    maxBitrate: 1_500_000,
-    maxFramerate: 15,
+    maxBitrate: 1_400_000,
+    maxFramerate: 18,
   },
 };
+
+/** Varsayılan lounge atmosferi (film/YouTube yokken) */
+export const SCREEN_SHARE_LOUNGE_THEME = {
+  id: 'vora_night',
+  label: 'Vora Gece Odası',
+} as const;

@@ -1,0 +1,172 @@
+diff --git a/node_modules/@livekit/react-native-webrtc/android/src/main/java/com/oney/WebRTCModule/AbstractVideoCaptureController.java b/node_modules/@livekit/react-native-webrtc/android/src/main/java/com/oney/WebRTCModule/AbstractVideoCaptureController.java
+index fe1f2b5..f5ce5e4 100644
+--- a/node_modules/@livekit/react-native-webrtc/android/src/main/java/com/oney/WebRTCModule/AbstractVideoCaptureController.java
++++ b/node_modules/@livekit/react-native-webrtc/android/src/main/java/com/oney/WebRTCModule/AbstractVideoCaptureController.java
+@@ -78,9 +78,12 @@ public abstract class AbstractVideoCaptureController {
+         try {
+             videoCapturer.startCapture(targetWidth, targetHeight, targetFps);
+         } catch (RuntimeException e) {
+-            // XXX This can only fail if we initialize the capturer incorrectly,
+-            // which we don't. Thus, ignore any failures here since we trust
+-            // ourselves.
++            // Android 13+: FGS henüz ready değilse burada düşer → captureFps=0 / siyah ekran.
++            // MediaProjectionService.awaitForegroundReady bu yarışı önler; log teşhis içindir.
++            android.util.Log.e(
++                    "AbstractVideoCaptureController",
++                    "startCapture failed (" + targetWidth + "x" + targetHeight + "@" + targetFps + ")",
++                    e);
+         }
+     }
+ 
+diff --git a/node_modules/@livekit/react-native-webrtc/android/src/main/java/com/oney/WebRTCModule/GetUserMediaImpl.java b/node_modules/@livekit/react-native-webrtc/android/src/main/java/com/oney/WebRTCModule/GetUserMediaImpl.java
+index 7dd0515..10e85d3 100644
+--- a/node_modules/@livekit/react-native-webrtc/android/src/main/java/com/oney/WebRTCModule/GetUserMediaImpl.java
++++ b/node_modules/@livekit/react-native-webrtc/android/src/main/java/com/oney/WebRTCModule/GetUserMediaImpl.java
+@@ -79,6 +79,8 @@ class GetUserMediaImpl {
+ 
+                     ThreadUtils.runOnExecutor(() -> {
+                         MediaProjectionService.launch(activity);
++                        // FGS startForeground bitmeden startCapture → captureFps=0 / siyah ekran.
++                        MediaProjectionService.awaitForegroundReady(2_500);
+                         createScreenStream();
+                     });
+                 }
+@@ -391,6 +393,14 @@ class GetUserMediaImpl {
+         DisplayMetrics displayMetrics = DisplayUtils.getDisplayMetrics(reactContext.getCurrentActivity());
+         int width = displayMetrics.widthPixels;
+         int height = displayMetrics.heightPixels;
++        // Tam telefon çözünürlüğü (ör. 1220x2712) birçok cihazda 0 encoded frame üretir.
++        final int maxLongEdge = 1280;
++        int longEdge = Math.max(width, height);
++        if (longEdge > maxLongEdge) {
++            float scale = (float) maxLongEdge / (float) longEdge;
++            width = Math.round(width * scale) & ~1;
++            height = Math.round(height * scale) & ~1;
++        }
+         ScreenCaptureController screenCaptureController = new ScreenCaptureController(
+                 reactContext.getCurrentActivity(), width, height, mediaProjectionPermissionResultData);
+         return createVideoTrack(screenCaptureController);
+diff --git a/node_modules/@livekit/react-native-webrtc/android/src/main/java/com/oney/WebRTCModule/MediaProjectionService.java b/node_modules/@livekit/react-native-webrtc/android/src/main/java/com/oney/WebRTCModule/MediaProjectionService.java
+index 26e188c..91937e3 100644
+--- a/node_modules/@livekit/react-native-webrtc/android/src/main/java/com/oney/WebRTCModule/MediaProjectionService.java
++++ b/node_modules/@livekit/react-native-webrtc/android/src/main/java/com/oney/WebRTCModule/MediaProjectionService.java
+@@ -11,6 +11,8 @@ import android.os.IBinder;
+ import android.util.Log;
+ 
+ import java.util.Random;
++import java.util.concurrent.CountDownLatch;
++import java.util.concurrent.TimeUnit;
+ 
+ /**
+  * This class implements an Android {@link Service}, a foreground one specifically, and it's
+@@ -24,6 +26,9 @@ public class MediaProjectionService extends Service {
+ 
+     static final int NOTIFICATION_ID = new Random().nextInt(99999) + 10000;
+ 
++    /** startCapture, startForeground tamamlanmadan çalışırsa Android 13+ kare üretmez (siyah ekran). */
++    private static volatile CountDownLatch foregroundLatch;
++
+     public static void launch(Context context) {
+         if (!WebRTCModuleOptions.getInstance().enableMediaProjectionService) {
+             return;
+@@ -32,6 +37,7 @@ public class MediaProjectionService extends Service {
+         MediaProjectionNotification.createNotificationChannel(context);
+         Intent intent = new Intent(context, MediaProjectionService.class);
+         ComponentName componentName;
++        foregroundLatch = new CountDownLatch(1);
+ 
+         try {
+             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+@@ -43,16 +49,45 @@ public class MediaProjectionService extends Service {
+             // Avoid crashing due to ForegroundServiceStartNotAllowedException (API level 31).
+             // See: https://developer.android.com/guide/components/foreground-services#background-start-restrictions
+             Log.w(TAG, "Media projection service not started", e);
++            CountDownLatch latch = foregroundLatch;
++            if (latch != null) {
++                latch.countDown();
++            }
+             return;
+         }
+ 
+         if (componentName == null) {
+             Log.w(TAG, "Media projection service not started");
++            CountDownLatch latch = foregroundLatch;
++            if (latch != null) {
++                latch.countDown();
++            }
+         } else {
+             Log.i(TAG, "Media projection service started");
+         }
+     }
+ 
++    /** startCapture öncesi FGS hazır olana kadar bekle. */
++    public static boolean awaitForegroundReady(long timeoutMs) {
++        if (!WebRTCModuleOptions.getInstance().enableMediaProjectionService) {
++            return true;
++        }
++        CountDownLatch latch = foregroundLatch;
++        if (latch == null) {
++            return true;
++        }
++        try {
++            boolean ready = latch.await(timeoutMs, TimeUnit.MILLISECONDS);
++            if (!ready) {
++                Log.w(TAG, "Timed out waiting for MediaProjection foreground service");
++            }
++            return ready;
++        } catch (InterruptedException e) {
++            Thread.currentThread().interrupt();
++            return false;
++        }
++    }
++
+     public static void abort(Context context) {
+         if (!WebRTCModuleOptions.getInstance().enableMediaProjectionService) {
+             return;
+@@ -77,6 +112,11 @@ public class MediaProjectionService extends Service {
+             startForeground(NOTIFICATION_ID, notification);
+         }
+ 
++        CountDownLatch latch = foregroundLatch;
++        if (latch != null) {
++            latch.countDown();
++        }
++
+         return START_NOT_STICKY;
+     }
+ }
+diff --git a/node_modules/@livekit/react-native-webrtc/android/src/main/java/com/oney/WebRTCModule/ScreenCaptureController.java b/node_modules/@livekit/react-native-webrtc/android/src/main/java/com/oney/WebRTCModule/ScreenCaptureController.java
+index b5741aa..4f3f483 100644
+--- a/node_modules/@livekit/react-native-webrtc/android/src/main/java/com/oney/WebRTCModule/ScreenCaptureController.java
++++ b/node_modules/@livekit/react-native-webrtc/android/src/main/java/com/oney/WebRTCModule/ScreenCaptureController.java
+@@ -36,18 +36,27 @@ public class ScreenCaptureController extends AbstractVideoCaptureController {
+             @Override
+             public void onOrientationChanged(int orientation) {
+                 DisplayMetrics displayMetrics = DisplayUtils.getDisplayMetrics((Activity) context);
+-                final int width = displayMetrics.widthPixels;
+-                final int height = displayMetrics.heightPixels;
++                int width = displayMetrics.widthPixels;
++                int height = displayMetrics.heightPixels;
++                final int maxLongEdge = 1280;
++                int longEdge = Math.max(width, height);
++                if (longEdge > maxLongEdge) {
++                    float scale = (float) maxLongEdge / (float) longEdge;
++                    width = Math.round(width * scale) & ~1;
++                    height = Math.round(height * scale) & ~1;
++                }
+                 if (width != ScreenCaptureController.this.actualWidth
+                         || height != ScreenCaptureController.this.actualHeight) {
+                     ScreenCaptureController.this.actualWidth = width;
+                     ScreenCaptureController.this.actualHeight = height;
++                    final int captureWidth = width;
++                    final int captureHeight = height;
+ 
+                     // Pivot to the executor thread because videoCapturer.changeCaptureFormat runs in the main
+                     // thread and may deadlock.
+                     ThreadUtils.runOnExecutor(() -> {
+                         try {
+-                            videoCapturer.changeCaptureFormat(width, height, DEFAULT_FPS);
++                            videoCapturer.changeCaptureFormat(captureWidth, captureHeight, DEFAULT_FPS);
+                         } catch (Exception ex) {
+                             // We ignore exceptions here. The video capturer runs on its own
+                             // thread and we cannot synchronize with it.

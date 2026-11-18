@@ -25,7 +25,11 @@ export class StartupErrorBoundary extends Component<Props, State> {
   componentDidCatch(error: Error, info: ErrorInfo) {
     devError('StartupErrorBoundary', 'uncaught render error', error);
     if (__DEV__) {
-      console.error('[StartupErrorBoundary]', info.componentStack);
+      console.error(
+        '[StartupErrorBoundary]',
+        error?.message ?? String(error),
+        info.componentStack,
+      );
     }
   }
 
