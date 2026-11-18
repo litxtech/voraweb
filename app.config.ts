@@ -95,10 +95,13 @@ const config: ExpoConfig = {
     entitlements: {
       'aps-environment': apnsEnvironment,
       'com.apple.developer.applesignin': ['Default'],
+      // LiveKit ekran paylaşımı — Broadcast Extension ile paylaşılan App Group.
+      'com.apple.security.application-groups': [`group.${APP_BUNDLE_ID}`],
     },
     infoPlist: {
       LSApplicationQueriesSchemes: ['whatsapp'],
-      UIBackgroundModes: ['remote-notification', 'audio', 'location'],
+      // voip: ekran paylaşımı / LiveKit oturumu dizi vb. uygulamadayken ayakta kalsın.
+      UIBackgroundModes: ['remote-notification', 'audio', 'voip', 'location'],
       ITSAppUsesNonExemptEncryption: false,
       NSCameraUsageDescription: 'Görüntülü arama, etkinlik QR girişi ve fotoğraf paylaşımı için kamera erişimi gerekir.',
       NSMicrophoneUsageDescription:
@@ -118,7 +121,7 @@ const config: ExpoConfig = {
     ...(fs.existsSync(googleServicesFile) ? { googleServicesFile: './google-services.json' } : {}),
     icon: './assets/icon-android.png',
     package: APP_ANDROID_PACKAGE,
-    versionCode: 20,
+    versionCode: 21,
     backgroundColor: '#F1F5F9',
     softwareKeyboardLayoutMode: 'resize',
     blockedPermissions: [
@@ -126,8 +129,7 @@ const config: ExpoConfig = {
       'android.permission.ACTIVITY_RECOGNITION',
       // Rehber eşleştirme yalnızca okur; kişi yazma izni istenmez.
       'android.permission.WRITE_CONTACTS',
-      // full-screen-sharing-special kaldırıldı; yedek olarak manifest'ten de silinir.
-      'android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION',
+      // Agora full-screen-sharing yolu kapalı; LiveKit MediaProjection ayrı izinle açılır.
       'android.permission.CAPTURE_VIDEO_OUTPUT',
       // Arka planda medya çalma kullanmıyoruz; Play FGS beyanını tetiklemesin (expo-audio varsayılanı).
       'android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK',
@@ -144,6 +146,8 @@ const config: ExpoConfig = {
       'android.permission.ACCESS_BACKGROUND_LOCATION',
       'android.permission.FOREGROUND_SERVICE',
       'android.permission.FOREGROUND_SERVICE_LOCATION',
+      // LiveKit city-voice ekran paylaşımı (MediaProjection FGS).
+      'android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION',
       'android.permission.POST_NOTIFICATIONS',
       'android.permission.READ_MEDIA_IMAGES',
       'android.permission.READ_MEDIA_VIDEO',
@@ -228,7 +232,15 @@ const config: ExpoConfig = {
       },
     ],
     'expo-video',
-    '@livekit/react-native-expo-plugin',
+    [
+      '@livekit/react-native-expo-plugin',
+      {
+        android: {
+          enableScreenShareService: true,
+        },
+      },
+    ],
+    './plugins/withLiveKitScreenShareIos',
     '@config-plugins/react-native-webrtc',
     'expo-secure-store',
     'react-native-compressor',
@@ -331,6 +343,21 @@ const config: ExpoConfig = {
   extra: {
     eas: {
       projectId: 'fddc3166-8869-44c7-987e-1f15dea17e0b',
+      build: {
+        experimental: {
+          ios: {
+            appExtensions: [
+              {
+                targetName: 'BroadcastExtension',
+                bundleIdentifier: `${APP_BUNDLE_ID}.broadcast`,
+                entitlements: {
+                  'com.apple.security.application-groups': [`group.${APP_BUNDLE_ID}`],
+                },
+              },
+            ],
+          },
+        },
+      },
     },
     EXPO_PUBLIC_SUPABASE_URL: process.env.EXPO_PUBLIC_SUPABASE_URL,
     EXPO_PUBLIC_SUPABASE_ANON_KEY: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,

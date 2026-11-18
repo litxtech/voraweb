@@ -1,6 +1,6 @@
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
-import { AccessToken } from 'npm:livekit-server-sdk@2.9.1';
+import { AccessToken, TrackSource } from 'npm:livekit-server-sdk@2.9.1';
 import { jsonSafeError } from '../_shared/supabaseAuth.ts';
 
 const corsHeaders = {
@@ -9,7 +9,9 @@ const corsHeaders = {
 };
 
 type TokenBody = {
+  kind?: 'city_voice' | 'screen_share';
   roomId?: string;
+  sessionId?: string;
   roomName?: string;
 };
 
@@ -55,8 +57,82 @@ serve(async (req) => {
 
     const userId = authData.user.id;
     const body = (await req.json()) as TokenBody;
-    const roomId = body.roomId?.trim();
+    const kind = body.kind === 'screen_share' ? 'screen_share' : 'city_voice';
 
+    if (kind === 'screen_share') {
+      const sessionId = body.sessionId?.trim();
+      if (!sessionId) {
+        return new Response(JSON.stringify({ error: 'sessionId required' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const { data: session, error: sessionError } = await admin
+        .from('screen_share_sessions')
+        .select('id, livekit_room_name, status, host_user_id')
+        .eq('id', sessionId)
+        .maybeSingle();
+
+      if (sessionError || !session) {
+        return new Response(JSON.stringify({ error: 'Session not found' }), {
+          status: 404,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      if (session.status !== 'live') {
+        return new Response(JSON.stringify({ error: 'Session ended' }), {
+          status: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const { data: participant } = await admin
+        .from('screen_share_participants')
+        .select('id')
+        .eq('session_id', sessionId)
+        .eq('user_id', userId)
+        .is('left_at', null)
+        .maybeSingle();
+
+      if (!participant) {
+        return new Response(JSON.stringify({ error: 'Join session first' }), {
+          status: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const isHost = session.host_user_id === userId;
+      const at = new AccessToken(apiKey, apiSecret, {
+        identity: userId,
+        ttl: '2h',
+      });
+      at.addGrant({
+        roomJoin: true,
+        room: session.livekit_room_name,
+        canPublish: true,
+        canSubscribe: true,
+        canPublishSources: [
+          TrackSource.MICROPHONE,
+          TrackSource.SCREEN_SHARE,
+          TrackSource.SCREEN_SHARE_AUDIO,
+        ],
+      });
+
+      const token = await at.toJwt();
+      return new Response(
+        JSON.stringify({
+          token,
+          url: livekitUrl,
+          roomName: session.livekit_room_name,
+          canPublish: true,
+          isHost,
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+
+    const roomId = body.roomId?.trim();
     if (!roomId) {
       return new Response(JSON.stringify({ error: 'roomId required' }), {
         status: 400,
@@ -112,6 +188,15 @@ serve(async (req) => {
       room: room.livekit_room_name,
       canPublish,
       canSubscribe: true,
+      ...(canPublish
+        ? {
+            canPublishSources: [
+              TrackSource.MICROPHONE,
+              TrackSource.SCREEN_SHARE,
+              TrackSource.SCREEN_SHARE_AUDIO,
+            ],
+          }
+        : {}),
     });
 
     const token = await at.toJwt();

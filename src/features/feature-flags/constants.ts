@@ -135,6 +135,14 @@ const ACTION_FEATURES: AppFeatureDef[] = [
   { id: 'compose', label: 'Gönderi Oluştur', group: 'actions', kind: 'root', routes: ['/compose', '/media-editor', '/capture'] },
   { id: 'vora-studio', label: 'VORA Video Studio', group: 'actions', kind: 'root', routes: ['/vora-studio'] },
   { id: 'calls', label: 'Sesli / Görüntülü Arama', group: 'actions', kind: 'root', routes: ['/call'] },
+  {
+    id: 'screen-share',
+    label: 'Sesli Oda',
+    group: 'actions',
+    kind: 'root',
+    routes: ['/screen-share'],
+    hint: 'Bagımsız sesli oda + ekran paylaşımı (şehir dışı)',
+  },
   { id: 'notifications', label: 'Bildirimler', group: 'actions', kind: 'root', routes: ['/notifications'] },
   { id: 'vcts', label: 'VORA Doğrulama (VCTS)', group: 'actions', kind: 'root', routes: ['/v'] },
   {

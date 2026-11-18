@@ -99,7 +99,7 @@ export function CentersDrawerMenu({
   const showSupport = isCenterVisible('support-center') && showHubSupport;
   const cityInCenterList = showCentersHub && isCenterVisible('city-system');
   const showCityShortcut = showCitySystem && !cityInCenterList;
-  const showFeedShortcuts = showLeaderboard || showLivePulse || showMap || showCityShortcut;
+  const showFeedShortcuts = true;
 
   const handleSupportPress = () => {
     router.push('/support-center' as Href);
@@ -168,6 +168,14 @@ export function CentersDrawerMenu({
           <Text variant="caption" style={[styles.sectionLabel, { color: colors.textMuted }]}>
             Akış
           </Text>
+          <CentersDrawerLinkRow
+            icon="people-circle-outline"
+            label="Sesli oda"
+            hint="Ekran"
+            href="/screen-share"
+            onNavigate={onCenterNavigate}
+            accentIcon
+          />
           {showLeaderboard ? (
             <CentersDrawerLinkRow
               icon="trophy-outline"

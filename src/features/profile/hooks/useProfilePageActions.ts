@@ -128,6 +128,13 @@ export function useProfilePageActions({
         ]
       : []),
     {
+      key: 'screen-share',
+      label: 'Sesli oda',
+      icon: 'people-circle-outline',
+      tone: 'default',
+      onPress: () => router.push('/screen-share' as Href),
+    },
+    {
       key: 'purchase-history',
       label: 'Satın Alma Geçmişi',
       icon: 'receipt-outline',

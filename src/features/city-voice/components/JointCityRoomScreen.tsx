@@ -240,7 +240,7 @@ export function JointCityRoomScreen({ roomId }: JointCityRoomScreenProps) {
   return (
     <GradientBackground>
       <LiveKitRoom
-        key={`${tokenBundle.token}:${canPublish ? 'pub' : 'sub'}`}
+        key={tokenBundle.token}
         serverUrl={tokenBundle.url}
         token={tokenBundle.token}
         connect
