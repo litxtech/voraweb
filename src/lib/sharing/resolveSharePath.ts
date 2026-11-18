@@ -8,6 +8,16 @@ export function resolveSharePath(path: string): string | null {
   const pathPart = queryIndex >= 0 ? normalized.slice(0, queryIndex) : normalized;
   const query = queryIndex >= 0 ? normalized.slice(queryIndex + 1) : '';
 
+  const screenShare = pathPart.match(/^ss\/([^/?#]+)/);
+  if (screenShare) {
+    return `/screen-share/${decodeURIComponent(screenShare[1])}${query ? `?${query}` : ''}`;
+  }
+
+  const screenShareLong = pathPart.match(/^screen-share\/([^/?#]+)/);
+  if (screenShareLong) {
+    return `/screen-share/${decodeURIComponent(screenShareLong[1])}${query ? `?${query}` : ''}`;
+  }
+
   const match = pathPart.match(/^(p|r|v|u|m|s|c)\/([^/?#]+)/);
   if (!match) {
     const canlar = pathPart.match(/^vora-canlar\/post\/([^/?#]+)/);

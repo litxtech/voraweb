@@ -47,7 +47,8 @@ export function extractShareLinkPath(raw: string): string | null {
 
   const bare = trimmed.replace(/^\/+/, '');
   if (bare.includes('://')) return null;
-  if (/^(p|r|v|u|m|s|c)\//.test(bare)) return bare;
+  if (/^(p|r|v|u|m|s|c|ss)\//.test(bare)) return bare;
+  if (/^screen-share\//.test(bare)) return bare;
   return null;
 }
 

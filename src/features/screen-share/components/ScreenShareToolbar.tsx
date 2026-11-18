@@ -7,6 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@/components/ui/Text';
 import { SCREEN_SHARE_ACCENT } from '@/features/screen-share/constants';
 import { startScreenCapture, stopScreenCapture } from '@/features/screen-share/services/screenCapture';
+import { waitForRoomConnected } from '@/features/screen-share/services/waitForRoomConnected';
 import { radius, spacing } from '@/constants/theme';
 import { useTheme } from '@/providers/ThemeProvider';
 
@@ -100,16 +101,21 @@ export function ScreenShareToolbar({
   const roomReady = connectionState === ConnectionState.Connected;
 
   const toggleMic = useCallback(async () => {
-    if (!roomReady) {
-      Alert.alert('Mikrofon', 'Bağlantı hazır değil — biraz bekle');
-      return;
-    }
+    if (!room) return;
+    setBusy(true);
     try {
+      const ready = roomReady || (await waitForRoomConnected(room));
+      if (!ready) {
+        Alert.alert('Mikrofon', 'Bağlantı kurulamadı — tekrar dene');
+        return;
+      }
       await localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled);
     } catch (err) {
       Alert.alert('Mikrofon', err instanceof Error ? err.message : 'Açılamadı');
+    } finally {
+      setBusy(false);
     }
-  }, [isMicrophoneEnabled, localParticipant, roomReady]);
+  }, [isMicrophoneEnabled, localParticipant, room, roomReady]);
 
   const toggleShare = useCallback(async () => {
     if (!isHost) {
@@ -117,12 +123,15 @@ export function ScreenShareToolbar({
       return;
     }
     if (!room) return;
-    if (!roomReady && !sharing) {
-      Alert.alert('Ekran', 'Oda bağlantısı hazır değil — yeşil bağlanınca tekrar dene');
-      return;
-    }
     setBusy(true);
     try {
+      if (!sharing) {
+        const ready = roomReady || (await waitForRoomConnected(room));
+        if (!ready) {
+          Alert.alert('Ekran', 'Bağlantı kurulamadı — tekrar dene');
+          return;
+        }
+      }
       if (sharing) {
         await stopScreenCapture(room);
       } else {

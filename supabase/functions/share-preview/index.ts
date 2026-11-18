@@ -561,6 +561,39 @@ async function fetchCanlarMeta(
   };
 }
 
+async function fetchScreenShareMeta(
+  supabase: ReturnType<typeof createClient>,
+  id: string,
+): Promise<ShareMeta | null> {
+  const { data } = await supabase
+    .from('screen_share_sessions')
+    .select('id, title, status, join_code, cover_image_url, password_hash, has_password')
+    .eq('id', id)
+    .maybeSingle();
+  if (!data) return null;
+
+  const title = ((data.title as string | null) ?? '').trim() || 'Vora sesli oda';
+  const live = data.status === 'live';
+  const locked = Boolean(data.has_password ?? data.password_hash);
+  const code = (data.join_code as string | null) ?? '';
+
+  return {
+    title: `${title} · Sesli oda`,
+    description: live
+      ? locked
+        ? `Şifreli sesli odaya katıl${code ? ` · kod ${code}` : ''}`
+        : `Sesli odaya katıl${code ? ` · kod ${code}` : ''}`
+      : 'Bu oda sona ermiş olabilir. Vora’da yeni odaları keşfet.',
+    imageUrl: (data.cover_image_url as string | null) ?? null,
+    videoUrl: null,
+    canonicalUrl: `${SHARE_BASE_URL}/ss/${id}`,
+    deepLink: `${APP_SCHEME}://ss/${id}`,
+    contentType: 'website',
+    badgeLabel: 'Sesli oda',
+    primaryCtaLabel: 'Odaya gir',
+  };
+}
+
 function serveAppleAssociation(): Response {
   const body = {
     applinks: {
@@ -568,7 +601,7 @@ function serveAppleAssociation(): Response {
       details: [
         {
           appID: `${APPLE_TEAM_ID}.${IOS_BUNDLE_ID}`,
-          paths: ['/p/*', '/r/*', '/v/*', '/u/*', '/m/*', '/s/*', '/c/*'],
+          paths: ['/p/*', '/r/*', '/v/*', '/u/*', '/m/*', '/s/*', '/c/*', '/ss/*'],
         },
       ],
     },
@@ -608,7 +641,7 @@ serve(async (req) => {
     return serveAssetLinks();
   }
 
-  const match = path.match(/^\/(p|r|v|u|m|s|c)\/([^/]+)\/?$/);
+  const match = path.match(/^\/(p|r|v|u|m|s|c|ss)\/([^/]+)\/?$/);
   if (!match) {
     return htmlResponse(
       renderLandingPage({
@@ -654,6 +687,9 @@ serve(async (req) => {
       break;
     case 'c':
       meta = await fetchCanlarMeta(supabase, id);
+      break;
+    case 'ss':
+      meta = await fetchScreenShareMeta(supabase, id);
       break;
   }
 

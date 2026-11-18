@@ -3,6 +3,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@/components/ui/Text';
 import { ScreenShareSeat } from '@/features/screen-share/components/ScreenShareSeat';
 import {
+  SCREEN_SHARE_GRID_SEATS,
   useScreenShareLoungeMembers,
   type LoungeSeatMember,
 } from '@/features/screen-share/hooks/useScreenShareLoungeMembers';
@@ -21,7 +22,9 @@ type Props = {
   onTakeSeat?: () => void;
 };
 
-/** Koltuklu ses sahnesi + dinleyici şeridi. */
+const GRID_COLS = 4;
+
+/** Koltuklu ses sahnesi: lider üstte, altında 4’erli 12 koltuk. */
 export function ScreenShareLoungeStage({
   sessionId,
   onAvatarPress,
@@ -30,7 +33,8 @@ export function ScreenShareLoungeStage({
   onLeaveSeat,
   onTakeSeat,
 }: Props) {
-  const { seats, listeners, emptySlots } = useScreenShareLoungeMembers(sessionId);
+  const { seats, leader, gridSeated, listeners, emptyGridSlots, leaderEmpty } =
+    useScreenShareLoungeMembers(sessionId);
 
   const onPress = (m: LoungeSeatMember) => {
     onAvatarPress(m);
@@ -66,28 +70,60 @@ export function ScreenShareLoungeStage({
     );
   }
 
+  const gridSlots: Array<LoungeSeatMember | null> = [
+    ...gridSeated,
+    ...Array.from({ length: emptyGridSlots }, () => null),
+  ].slice(0, SCREEN_SHARE_GRID_SEATS);
+
+  const rows: Array<Array<LoungeSeatMember | null>> = [];
+  for (let i = 0; i < gridSlots.length; i += GRID_COLS) {
+    rows.push(gridSlots.slice(i, i + GRID_COLS));
+  }
+
   return (
     <View style={styles.wrap}>
       <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.seatRail}
-        decelerationRate="fast"
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.seatBoard}
+        bounces={false}
       >
-        {seats.map((m) => (
-          <ScreenShareSeat key={m.userId} member={m} onPress={() => onPress(m)} />
-        ))}
-        {Array.from({ length: emptySlots }).map((_, i) => (
-          <ScreenShareSeat key={`empty-${i}`} empty />
-        ))}
-      </ScrollView>
-
-      {seats.length === 0 ? (
-        <View style={styles.emptyCopy}>
-          <Text style={styles.emptyTitle}>Bu odada ilk sohbeti sen başlat!</Text>
-          <Text style={styles.emptyHint}>Koltuğa otur, arkadaşlarını davet et.</Text>
+        <View style={styles.leaderRow}>
+          <Text style={styles.leaderLabel}>LİDER</Text>
+          {leader ? (
+            <ScreenShareSeat member={leader} leader onPress={() => onPress(leader)} />
+          ) : (
+            <ScreenShareSeat empty leader />
+          )}
+          {leaderEmpty ? (
+            <Text style={styles.leaderHint}>Lider koltuğu boş</Text>
+          ) : null}
         </View>
-      ) : null}
+
+        <View style={styles.grid}>
+          {rows.map((row, rowIndex) => (
+            <View key={`row-${rowIndex}`} style={styles.gridRow}>
+              {row.map((m, colIndex) =>
+                m ? (
+                  <View key={m.userId} style={styles.gridCell}>
+                    <ScreenShareSeat member={m} grid onPress={() => onPress(m)} />
+                  </View>
+                ) : (
+                  <View key={`empty-${rowIndex}-${colIndex}`} style={styles.gridCell}>
+                    <ScreenShareSeat empty grid />
+                  </View>
+                ),
+              )}
+            </View>
+          ))}
+        </View>
+
+        {seats.length === 0 ? (
+          <View style={styles.emptyCopy}>
+            <Text style={styles.emptyTitle}>Bu odada ilk sohbeti sen başlat!</Text>
+            <Text style={styles.emptyHint}>Koltuğa otur, arkadaşlarını davet et.</Text>
+          </View>
+        ) : null}
+      </ScrollView>
 
       <View style={styles.seatActions}>
         {iAmSeated && onLeaveSeat ? (
@@ -144,11 +180,39 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: spacing.sm,
   },
-  seatRail: {
-    paddingHorizontal: spacing.md,
+  seatBoard: {
+    paddingHorizontal: spacing.sm,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.md,
+    gap: spacing.md,
+    alignItems: 'stretch',
+  },
+  leaderRow: {
+    alignItems: 'center',
+    gap: 4,
+  },
+  leaderLabel: {
+    color: '#E8C872',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1.4,
+  },
+  leaderHint: {
+    color: 'rgba(232,200,114,0.55)',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  grid: {
     gap: 10,
-    alignItems: 'flex-end',
-    paddingVertical: 8,
+  },
+  gridRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  gridCell: {
+    width: '25%',
+    alignItems: 'center',
   },
   railWrap: {
     paddingTop: 4,
@@ -196,7 +260,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
     paddingHorizontal: spacing.lg,
-    marginTop: spacing.md,
+    marginTop: spacing.sm,
   },
   emptyTitle: {
     color: '#F4F7FB',

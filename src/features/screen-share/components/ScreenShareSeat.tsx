@@ -12,29 +12,63 @@ type Props = {
   onPress?: () => void;
   /** Video altı yatay şerit */
   rail?: boolean;
+  /** 4’lü ızgara hücresi */
+  grid?: boolean;
+  /** Üst lider koltuğu */
+  leader?: boolean;
 };
 
 const AVATAR = 56;
+const AVATAR_GRID = 44;
 const AVATAR_RAIL = 42;
+const AVATAR_LEADER = 62;
 
 /** Gerçekçi premium koltuk — arkalık + kolçak + minder + avatar. */
-export function ScreenShareSeat({ member, empty, onPress, rail }: Props) {
-  const size = rail ? AVATAR_RAIL : AVATAR;
+export function ScreenShareSeat({ member, empty, onPress, rail, grid, leader }: Props) {
+  const size = leader ? AVATAR_LEADER : rail ? AVATAR_RAIL : grid ? AVATAR_GRID : AVATAR;
+  const seatStyle = [
+    styles.seat,
+    rail && styles.seatRail,
+    grid && styles.seatGrid,
+    leader && styles.seatLeader,
+  ];
+  const chairStyle = [styles.chair, rail && styles.chairRail, grid && styles.chairGrid];
+  const backrestStyle = [
+    styles.backrest,
+    rail && styles.backrestRail,
+    grid && styles.backrestGrid,
+    leader && styles.backrestLeader,
+  ];
+  const armStyle = [styles.arm, rail && styles.armRail, grid && styles.armGrid, leader && styles.armLeader];
+  const cushionStyle = [
+    styles.cushion,
+    rail && styles.cushionRail,
+    grid && styles.cushionGrid,
+    leader && styles.cushionLeader,
+  ];
 
   if (empty || !member) {
     return (
-      <View style={[styles.seat, rail && styles.seatRail]}>
-        <View style={[styles.chair, rail && styles.chairRail, styles.chairEmpty]}>
-          <View style={[styles.backrest, rail && styles.backrestRail, styles.backrestEmpty]} />
+      <View style={seatStyle}>
+        <View style={[...chairStyle, styles.chairEmpty, leader && styles.chairHost]}>
+          <View style={[...backrestStyle, styles.backrestEmpty, leader && styles.backrestLeaderEmpty]} />
           <View style={[styles.arms, rail && styles.armsRail]}>
-            <View style={[styles.arm, rail && styles.armRail, styles.armEmpty]} />
-            <View style={[styles.cushion, rail && styles.cushionRail, styles.cushionEmpty]}>
-              <Ionicons name="add" size={rail ? 14 : 18} color="rgba(255,255,255,0.28)" />
+            <View style={[...armStyle, styles.armEmpty, leader && styles.armHost]} />
+            <View style={[...cushionStyle, styles.cushionEmpty, leader && styles.cushionHost]}>
+              <Ionicons
+                name={leader ? 'diamond-outline' : 'add'}
+                size={rail ? 14 : leader ? 20 : 16}
+                color={leader ? 'rgba(232,200,114,0.55)' : 'rgba(255,255,255,0.28)'}
+              />
             </View>
-            <View style={[styles.arm, rail && styles.armRail, styles.armEmpty]} />
+            <View style={[...armStyle, styles.armEmpty, leader && styles.armHost]} />
           </View>
         </View>
-        {!rail ? <Text style={styles.emptyLabel}>Boş</Text> : null}
+        {!rail ? (
+          <Text style={[styles.emptyLabel, leader && styles.emptyLeaderLabel]}>
+            {leader ? 'Lider' : 'Boş'}
+          </Text>
+        ) : null}
       </View>
     );
   }
@@ -42,7 +76,7 @@ export function ScreenShareSeat({ member, empty, onPress, rail }: Props) {
   const initial = (member.username || '?').slice(0, 1).toUpperCase();
   const speaking = member.isSpeaking;
   const micOff = !member.micEnabled;
-  const host = member.isHost;
+  const host = member.isHost || Boolean(leader);
 
   return (
     <Pressable
@@ -50,21 +84,15 @@ export function ScreenShareSeat({ member, empty, onPress, rail }: Props) {
       accessibilityRole="button"
       accessibilityLabel={`@${member.username}`}
       hitSlop={6}
-      style={({ pressed }) => [
-        styles.seat,
-        rail && styles.seatRail,
-        { opacity: pressed ? 0.9 : 1 },
-      ]}
+      style={({ pressed }) => [...seatStyle, { opacity: pressed ? 0.9 : 1 }]}
     >
       <View
         style={[
-          styles.chair,
-          rail && styles.chairRail,
+          ...chairStyle,
           host && styles.chairHost,
           speaking && styles.chairSpeaking,
         ]}
       >
-        {/* Arkalık */}
         <LinearGradient
           colors={
             host
@@ -73,12 +101,12 @@ export function ScreenShareSeat({ member, empty, onPress, rail }: Props) {
                 ? ['#1A3A34', '#122820', '#0C1814']
                 : ['#2A3140', '#1A2030', '#121820']
           }
-          style={[styles.backrest, rail && styles.backrestRail]}
+          style={backrestStyle}
         />
 
         <View style={[styles.arms, rail && styles.armsRail]}>
-          <View style={[styles.arm, rail && styles.armRail, host && styles.armHost]} />
-          <View style={[styles.cushion, rail && styles.cushionRail, host && styles.cushionHost]}>
+          <View style={[...armStyle, host && styles.armHost]} />
+          <View style={[...cushionStyle, host && styles.cushionHost]}>
             {speaking ? (
               <View
                 style={[
@@ -98,7 +126,11 @@ export function ScreenShareSeat({ member, empty, onPress, rail }: Props) {
                   width: size + 6,
                   height: size + 6,
                   borderRadius: (size + 6) / 2,
-                  borderColor: speaking ? SCREEN_SHARE_ACCENT : host ? '#E8C872' : 'rgba(255,255,255,0.25)',
+                  borderColor: speaking
+                    ? SCREEN_SHARE_ACCENT
+                    : host
+                      ? '#E8C872'
+                      : 'rgba(255,255,255,0.25)',
                 },
               ]}
             >
@@ -111,32 +143,34 @@ export function ScreenShareSeat({ member, empty, onPress, rail }: Props) {
                 />
               ) : (
                 <View style={[styles.fallback, { width: size, height: size, borderRadius: size / 2 }]}>
-                  <Text style={[styles.initial, rail && { fontSize: 14 }]}>{initial}</Text>
+                  <Text style={[styles.initial, (rail || grid) && { fontSize: 14 }]}>{initial}</Text>
                 </View>
               )}
             </View>
             {micOff ? (
-              <View style={[styles.micBadge, rail && styles.micBadgeRail]}>
-                <Ionicons name="mic-off" size={rail ? 8 : 10} color="#fff" />
+              <View style={[styles.micBadge, (rail || grid) && styles.micBadgeRail]}>
+                <Ionicons name="mic-off" size={rail || grid ? 8 : 10} color="#fff" />
               </View>
             ) : speaking ? (
-              <View style={[styles.liveBadge, rail && styles.micBadgeRail]}>
+              <View style={[styles.liveBadge, (rail || grid) && styles.micBadgeRail]}>
                 <View style={styles.liveDot} />
               </View>
             ) : null}
             {host ? (
-              <View style={[styles.crown, rail && styles.crownRail]}>
-                <Ionicons name="diamond" size={rail ? 8 : 10} color="#1A1408" />
+              <View style={[styles.crown, (rail || grid) && styles.crownRail]}>
+                <Ionicons name="diamond" size={rail || grid ? 8 : 10} color="#1A1408" />
               </View>
             ) : null}
           </View>
-          <View style={[styles.arm, rail && styles.armRail, host && styles.armHost]} />
+          <View style={[...armStyle, host && styles.armHost]} />
         </View>
 
-        {/* Ayak gölgesi */}
-        {!rail ? <View style={[styles.legs, host && styles.legsHost]} /> : null}
+        {!rail ? <View style={[styles.legs, host && styles.legsHost, grid && styles.legsGrid]} /> : null}
       </View>
-      <Text style={[styles.name, rail && styles.nameRail]} numberOfLines={1}>
+      <Text
+        style={[styles.name, rail && styles.nameRail, grid && styles.nameGrid, leader && styles.nameLeader]}
+        numberOfLines={1}
+      >
         {member.username}
       </Text>
     </Pressable>
@@ -153,6 +187,15 @@ const styles = StyleSheet.create({
     width: 76,
     gap: 5,
   },
+  seatGrid: {
+    width: '100%',
+    maxWidth: 92,
+    gap: 5,
+  },
+  seatLeader: {
+    width: 128,
+    gap: 6,
+  },
   chair: {
     width: '100%',
     alignItems: 'center',
@@ -160,6 +203,9 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   chairRail: {
+    paddingBottom: 4,
+  },
+  chairGrid: {
     paddingBottom: 4,
   },
   chairEmpty: { opacity: 0.7 },
@@ -183,9 +229,28 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 18,
     marginBottom: -6,
   },
+  backrestGrid: {
+    width: 58,
+    height: 26,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    marginBottom: -8,
+  },
+  backrestLeader: {
+    width: 88,
+    height: 40,
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    marginBottom: -12,
+    borderColor: 'rgba(232,200,114,0.35)',
+  },
   backrestEmpty: {
     backgroundColor: 'rgba(255,255,255,0.06)',
     borderStyle: 'dashed',
+  },
+  backrestLeaderEmpty: {
+    backgroundColor: 'rgba(232,200,114,0.1)',
+    borderColor: 'rgba(232,200,114,0.28)',
   },
   arms: {
     flexDirection: 'row',
@@ -207,6 +272,15 @@ const styles = StyleSheet.create({
     width: 8,
     height: 24,
     borderRadius: 6,
+  },
+  armGrid: {
+    width: 9,
+    height: 28,
+    borderRadius: 6,
+  },
+  armLeader: {
+    width: 13,
+    height: 38,
   },
   armHost: {
     backgroundColor: '#3A3220',
@@ -233,6 +307,16 @@ const styles = StyleSheet.create({
     height: 38,
     borderRadius: 14,
   },
+  cushionGrid: {
+    width: 60,
+    height: 42,
+    borderRadius: 16,
+  },
+  cushionLeader: {
+    width: 86,
+    height: 58,
+    borderRadius: 22,
+  },
   cushionHost: {
     backgroundColor: '#2E2818',
     borderColor: 'rgba(232,200,114,0.4)',
@@ -258,6 +342,10 @@ const styles = StyleSheet.create({
     height: 5,
     borderRadius: 3,
     backgroundColor: 'rgba(0,0,0,0.35)',
+  },
+  legsGrid: {
+    width: 48,
+    height: 4,
   },
   legsHost: {
     backgroundColor: 'rgba(232,200,114,0.25)',
@@ -339,9 +427,24 @@ const styles = StyleSheet.create({
     maxWidth: 72,
     color: '#C5D0DC',
   },
+  nameGrid: {
+    fontSize: 10,
+    maxWidth: 84,
+    color: '#C5D0DC',
+  },
+  nameLeader: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#E8C872',
+    maxWidth: 120,
+  },
   emptyLabel: {
     color: 'rgba(255,255,255,0.3)',
     fontSize: 11,
     fontWeight: '600',
+  },
+  emptyLeaderLabel: {
+    color: 'rgba(232,200,114,0.7)',
+    fontWeight: '700',
   },
 });

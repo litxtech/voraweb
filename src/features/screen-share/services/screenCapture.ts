@@ -1,24 +1,21 @@
 import type { Component, RefObject } from 'react';
 import { findNodeHandle, NativeModules, Platform } from 'react-native';
 import type { Room } from 'livekit-client';
-import { ConnectionState } from 'livekit-client';
 import { SCREEN_SHARE_CAPTURE, SCREEN_SHARE_PUBLISH } from '@/features/screen-share/constants';
 import {
   clearScreenShareIntent,
   markScreenShareIntent,
 } from '@/features/screen-share/services/screenShareIntentStore';
-
-function assertRoomReady(room: Room) {
-  if (room.state !== ConnectionState.Connected) {
-    throw new Error('Bağlantı hazır değil — birkaç saniye sonra tekrar dene');
-  }
-}
+import { waitForRoomConnected } from '@/features/screen-share/services/waitForRoomConnected';
 
 export async function startScreenCapture(
   room: Room,
   pickerRef: RefObject<Component | null>,
 ): Promise<void> {
-  assertRoomReady(room);
+  const ready = await waitForRoomConnected(room);
+  if (!ready) {
+    throw new Error('Bağlantı kurulamadı — tekrar dene');
+  }
 
   if (Platform.OS === 'ios') {
     const reactTag = findNodeHandle(pickerRef.current as Parameters<typeof findNodeHandle>[0]);

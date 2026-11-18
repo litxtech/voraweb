@@ -106,3 +106,24 @@ export function buildShareDeepLink(kind: ShareContentKind, id: string, buy?: boo
   const base = `${VORA_APP_SCHEME}://${segment}/${encodeURIComponent(value)}`;
   return kind === 'marketplace' && buy ? `${base}?buy=1` : base;
 }
+
+/** Sesli oda — tıklanınca uygulamada /screen-share/{id} açılır (şifre varsa sheet). */
+export function buildScreenSharePublicUrl(sessionId: string): string {
+  return `${VORA_SHARE_BASE_URL}/ss/${encodeURIComponent(sessionId)}`;
+}
+
+export function buildScreenShareDeepLink(sessionId: string): string {
+  return `${VORA_APP_SCHEME}://ss/${encodeURIComponent(sessionId)}`;
+}
+
+export function buildScreenShareAndroidIntentUrl(
+  sessionId: string,
+  fallbackHttpsUrl?: string,
+): string {
+  const fallback = encodeURIComponent(fallbackHttpsUrl ?? buildScreenSharePublicUrl(sessionId));
+  return `intent://ss/${encodeURIComponent(sessionId)}#Intent;scheme=${APP_SCHEME};package=${APP_ANDROID_PACKAGE};S.browser_fallback_url=${fallback};end`;
+}
+
+export function formatScreenShareShareDisplayPath(sessionId: string): string {
+  return `${VORA_SHARE_DOMAIN}/ss/${sessionId}`;
+}

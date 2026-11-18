@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, AppState, Share, StyleSheet, View } from 'react-native';
-import * as Clipboard from 'expo-clipboard';
+import { ActivityIndicator, Alert, AppState, StyleSheet, View } from 'react-native';
 import { AudioSession, LiveKitRoom, registerGlobals } from '@livekit/react-native';
 import { router, useNavigation } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -19,6 +18,7 @@ import {
 } from '@/features/screen-share/services/screenShareSessionService';
 import { configureScreenShareAudioSession } from '@/features/screen-share/services/screenShareAudioSession';
 import { clearScreenShareIntent } from '@/features/screen-share/services/screenShareIntentStore';
+import { shareScreenShareInvite } from '@/features/screen-share/services/screenShareInviteShare';
 import type { ScreenShareSession } from '@/features/screen-share/types';
 import { spacing } from '@/constants/theme';
 import { useAuth } from '@/providers/AuthProvider';
@@ -189,9 +189,11 @@ export function ScreenShareSessionScreen({ sessionId }: Props) {
 
   const onCopyCode = async () => {
     if (!session) return;
-    await Clipboard.setStringAsync(session.joinCode);
-    await Share.share({
-      message: `Vora sesli oda kodu: ${session.joinCode}\nEkranı rahatça izle.`,
+    await shareScreenShareInvite({
+      sessionId: session.id,
+      title: session.title,
+      joinCode: session.joinCode,
+      hasPassword: session.hasPassword,
     }).catch(() => undefined);
   };
 

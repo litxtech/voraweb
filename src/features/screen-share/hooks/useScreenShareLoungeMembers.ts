@@ -12,7 +12,11 @@ export type LoungeSeatMember = ScreenShareParticipant & {
 };
 
 const REFRESH_MS = 8_000;
-const MAX_SEATS = 8;
+/** Lider + 11 üye = 12 koltuk (1 üst + 4’erli satırlar) */
+export const SCREEN_SHARE_MAX_SEATS = 12;
+export const SCREEN_SHARE_LEADER_SEATS = 1;
+export const SCREEN_SHARE_GRID_SEATS = SCREEN_SHARE_MAX_SEATS - SCREEN_SHARE_LEADER_SEATS;
+const MAX_SEATS = SCREEN_SHARE_MAX_SEATS;
 
 /** Online üyeler + LiveKit konuşma/mik/koltuk durumu. */
 export function useScreenShareLoungeMembers(sessionId: string) {
@@ -90,14 +94,26 @@ export function useScreenShareLoungeMembers(sessionId: string) {
     return merged;
   }, [members, liveParticipants, attrTick]);
 
-  const seats = all.filter((m) => m.seated).slice(0, MAX_SEATS);
-  const listeners = all.filter((m) => !m.seated);
-  const emptySlots = Math.max(0, Math.min(6, MAX_SEATS) - seats.length);
+  const seated = all.filter((m) => m.seated);
+  const leader = seated.find((m) => m.isHost) ?? null;
+  const gridPool = seated.filter((m) => !m.isHost);
+  const gridSeated = gridPool.slice(0, SCREEN_SHARE_GRID_SEATS);
+  const overflowSeated = gridPool.slice(SCREEN_SHARE_GRID_SEATS);
+  /** Lider her zaman ilk; sonra ızgara — UI 12 slot doldurur */
+  const seats = leader ? [leader, ...gridSeated] : gridSeated;
+  const listeners = [...all.filter((m) => !m.seated), ...overflowSeated];
+  const emptySlots = Math.max(0, MAX_SEATS - seats.length);
+  const emptyGridSlots = Math.max(0, SCREEN_SHARE_GRID_SEATS - gridSeated.length);
+  const leaderEmpty = !leader;
 
   return {
     seats,
+    leader,
+    gridSeated,
     listeners,
     emptySlots,
+    emptyGridSlots,
+    leaderEmpty,
     memberCount: members.length || all.length,
     refresh,
   };
