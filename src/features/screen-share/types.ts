@@ -15,6 +15,8 @@ export type ScreenShareSession = {
   createdAt: string;
   endedAt: string | null;
   hasPassword: boolean;
+  /** Hub / feed listesinde gizlenir; paylaşım linki ile girilebilir */
+  isHidden: boolean;
   isHost?: boolean;
   /** Hub kartında altta gösterilen 2–3 üye önizlemesi */
   previewMembers?: ScreenSharePreviewMember[];

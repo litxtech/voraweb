@@ -10,6 +10,7 @@ import {
 } from 'react';
 import { AppState, StyleSheet, View, type AppStateStatus } from 'react-native';
 import { CallFloatingBubble } from '@/features/calls/components/CallFloatingBubble';
+import { ScreenShareLiveKitGate } from '@/features/screen-share/components/ScreenShareLiveKitGate';
 import { isOnCallScreen, openCallScreen } from '@/features/calls/services/callNavigation';
 import { presentIncomingCall } from '@/features/calls/services/presentIncomingCall';
 import { cleanupStaleAcceptedCalls } from '@/features/calls/services/staleCallCleanup';
@@ -155,7 +156,9 @@ export function CallProvider({ children }: { children: ReactNode }) {
   return (
     <CallContext.Provider value={value}>
       <View style={styles.root}>
-        {children}
+        <ScreenShareLiveKitGate>
+          {children}
+        </ScreenShareLiveKitGate>
         <CallFloatingBubble />
       </View>
     </CallContext.Provider>

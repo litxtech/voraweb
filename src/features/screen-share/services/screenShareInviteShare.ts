@@ -11,23 +11,28 @@ type ShareInput = {
   title: string;
   joinCode: string;
   hasPassword?: boolean;
+  isHidden?: boolean;
 };
 
 export function buildScreenShareShareMessage(input: ShareInput): string {
-  const url = buildScreenSharePublicUrl(input.sessionId);
-  const lock = input.hasPassword ? '\n🔒 Şifreli oda' : '';
+  const url = buildScreenSharePublicUrl(input.sessionId, input.joinCode);
+  const flags = [
+    input.isHidden ? 'Gizli oda · listede görünmez' : null,
+    input.hasPassword ? 'Şifreli oda' : null,
+  ].filter(Boolean);
+  const flagLine = flags.length ? `\n${flags.join(' · ')}` : '';
   return [
-    `🎙️ ${input.title}`,
+    `${input.title}`,
     'Vora sesli odaya katıl — linke dokun:',
     url,
     '',
-    `Kod: ${input.joinCode}${lock}`,
+    `Kod: ${input.joinCode}${flagLine}`,
   ].join('\n');
 }
 
 export function buildScreenShareSharePayload(input: ShareInput) {
-  const publicUrl = buildScreenSharePublicUrl(input.sessionId);
-  const deepLink = buildScreenShareDeepLink(input.sessionId);
+  const publicUrl = buildScreenSharePublicUrl(input.sessionId, input.joinCode);
+  const deepLink = buildScreenShareDeepLink(input.sessionId, input.joinCode);
   return {
     message: buildScreenShareShareMessage(input),
     publicUrl,
@@ -46,7 +51,7 @@ export async function shareScreenShareInvite(input: ShareInput): Promise<void> {
     return;
   }
 
-  const androidUrl = buildScreenShareAndroidIntentUrl(input.sessionId, publicUrl);
+  const androidUrl = buildScreenShareAndroidIntentUrl(input.sessionId, publicUrl, input.joinCode);
   try {
     await Share.share({ message, url: androidUrl, title });
   } catch {

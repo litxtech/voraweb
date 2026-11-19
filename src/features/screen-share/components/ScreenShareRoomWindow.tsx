@@ -19,8 +19,9 @@ type Props = {
   onSafety?: () => void;
 };
 
-const AVATAR_SIZE = 24;
-const AVATAR_OVERLAP = 9;
+const HOST_AVATAR = 52;
+const AVATAR_SIZE = 22;
+const AVATAR_OVERLAP = 8;
 
 function PreviewAvatar({ member, index, total }: { member: ScreenSharePreviewMember; index: number; total: number }) {
   const initial = (member.username || '?').slice(0, 1).toUpperCase();
@@ -52,7 +53,7 @@ function PreviewAvatar({ member, index, total }: { member: ScreenSharePreviewMem
 }
 
 /**
- * Açık oda = cam pencere: 2 sütunlu dikdörtgen kart, kapak/avatar dolgu, üye önizlemesi.
+ * Açık oda = cam pencere: sahip avatarı + şifre/açık durumu net görünür.
  */
 export function ScreenShareRoomWindow({
   room,
@@ -65,7 +66,11 @@ export function ScreenShareRoomWindow({
 }: Props) {
   const preview = (room.previewMembers ?? []).slice(0, 3);
   const fillUrl = room.coverImageUrl || room.hostAvatarUrl || null;
-  const hostInitial = (room.hostUsername || room.title || '?').trim().slice(0, 1).toUpperCase();
+  const hostAvatar = room.hostAvatarUrl || null;
+  const hostName = (room.hostUsername || 'host').replace(/^@/, '');
+  const hostInitial = hostName.slice(0, 1).toUpperCase();
+  const locked = Boolean(room.hasPassword);
+  const hidden = Boolean(room.isHidden);
 
   return (
     <Pressable
@@ -133,11 +138,16 @@ export function ScreenShareRoomWindow({
               <View style={[styles.liveDot, sample && styles.sampleDot]} />
               <Text style={styles.liveText}>{sample ? 'ÖRNEK' : 'CANLI'}</Text>
             </View>
-            {room.hasPassword ? (
-              <Ionicons name="lock-closed" size={12} color={SCREEN_SHARE_ACCENT} />
-            ) : (
-              <View style={{ width: 12 }} />
-            )}
+            <View style={[styles.lockBadge, locked || hidden ? styles.lockBadgeOn : styles.lockBadgeOff]}>
+              <Ionicons
+                name={hidden ? 'eye-off' : locked ? 'lock-closed' : 'lock-open-outline'}
+                size={11}
+                color={locked || hidden ? '#FFD28A' : SCREEN_SHARE_ACCENT}
+              />
+              <Text style={[styles.lockBadgeText, locked || hidden ? styles.lockBadgeTextOn : styles.lockBadgeTextOff]}>
+                {hidden ? 'Gizli' : locked ? 'Şifreli' : 'Açık'}
+              </Text>
+            </View>
             {onSafety ? (
               <Pressable onPress={onSafety} hitSlop={8} style={styles.deleteHit}>
                 <Ionicons name="ellipsis-horizontal" size={14} color="rgba(255,255,255,0.55)" />
@@ -157,6 +167,33 @@ export function ScreenShareRoomWindow({
           </View>
 
           <View style={styles.body}>
+            <View style={styles.hostRow}>
+              <View style={styles.hostAvatarWrap}>
+                {hostAvatar ? (
+                  <OptimizedImage
+                    uri={hostAvatar}
+                    style={styles.hostAvatar}
+                    tier="avatar"
+                    recyclingKey={`ss-host-${room.hostUserId}`}
+                    layoutWidth={HOST_AVATAR}
+                  />
+                ) : (
+                  <View style={[styles.hostAvatar, styles.hostAvatarFallback]}>
+                    <Text style={styles.hostInitial}>{hostInitial}</Text>
+                  </View>
+                )}
+                <View style={styles.hostCrown}>
+                  <Ionicons name="diamond" size={9} color="#1A1408" />
+                </View>
+              </View>
+              <View style={styles.hostCopy}>
+                <Text style={styles.hostLabel}>ODA SAHİBİ</Text>
+                <Text style={styles.hostName} numberOfLines={1}>
+                  @{hostName}
+                </Text>
+              </View>
+            </View>
+
             <Text style={styles.title} numberOfLines={2}>
               {room.title}
             </Text>
@@ -198,7 +235,7 @@ const styles = StyleSheet.create({
     width: '50%',
     paddingHorizontal: 5,
     marginBottom: spacing.md,
-    minHeight: 210,
+    minHeight: 236,
     borderRadius: 20,
     shadowColor: '#00C2A8',
     shadowOpacity: 0.18,
@@ -209,7 +246,7 @@ const styles = StyleSheet.create({
   outerPinned: {
     width: '100%',
     paddingHorizontal: 0,
-    minHeight: 232,
+    minHeight: 248,
   },
   outerSample: {
     shadowColor: '#7B8CFF',
@@ -229,7 +266,7 @@ const styles = StyleSheet.create({
     borderRadius: 18.5,
     overflow: 'hidden',
     backgroundColor: 'rgba(12,16,24,0.45)',
-    minHeight: 206,
+    minHeight: 230,
   },
   initialFill: {
     ...StyleSheet.absoluteFillObject,
@@ -246,7 +283,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 10,
-    paddingVertical: 9,
+    paddingVertical: 8,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: 'rgba(255,255,255,0.08)',
     backgroundColor: 'rgba(0,0,0,0.22)',
@@ -258,7 +295,6 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
     gap: 4,
   },
   liveDot: {
@@ -276,6 +312,29 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 0.9,
   },
+  lockBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  lockBadgeOn: {
+    backgroundColor: 'rgba(255,210,138,0.16)',
+    borderColor: 'rgba(255,210,138,0.4)',
+  },
+  lockBadgeOff: {
+    backgroundColor: 'rgba(0,194,168,0.14)',
+    borderColor: 'rgba(0,194,168,0.35)',
+  },
+  lockBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  lockBadgeTextOn: { color: '#FFD28A' },
+  lockBadgeTextOff: { color: SCREEN_SHARE_ACCENT },
   deleteHit: {
     width: 26,
     height: 26,
@@ -284,11 +343,63 @@ const styles = StyleSheet.create({
   },
   body: {
     flex: 1,
-    gap: 5,
+    gap: 8,
     paddingHorizontal: spacing.sm + 4,
-    paddingTop: 14,
+    paddingTop: 12,
     paddingBottom: 8,
     justifyContent: 'flex-end',
+  },
+  hostRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 2,
+  },
+  hostAvatarWrap: {
+    width: HOST_AVATAR,
+    height: HOST_AVATAR,
+  },
+  hostAvatar: {
+    width: HOST_AVATAR,
+    height: HOST_AVATAR,
+    borderRadius: HOST_AVATAR / 2,
+    borderWidth: 2,
+    borderColor: 'rgba(232,200,114,0.7)',
+  },
+  hostAvatarFallback: {
+    backgroundColor: 'rgba(0,194,168,0.28)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  hostInitial: {
+    color: '#E8FFF9',
+    fontSize: 20,
+    fontWeight: '800',
+  },
+  hostCrown: {
+    position: 'absolute',
+    right: -2,
+    top: -2,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#E8C872',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: 'rgba(8,12,18,0.9)',
+  },
+  hostCopy: { flex: 1, gap: 1, minWidth: 0 },
+  hostLabel: {
+    color: 'rgba(232,200,114,0.85)',
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+  },
+  hostName: {
+    color: '#F4F7FB',
+    fontSize: 13,
+    fontWeight: '700',
   },
   title: {
     color: '#F4F7FB',

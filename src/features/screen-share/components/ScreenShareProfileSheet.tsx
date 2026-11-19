@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Modal,
   Pressable,
+  ScrollView,
   StyleSheet,
   View,
   useWindowDimensions,
@@ -27,9 +28,19 @@ type Props = {
   participant: ScreenShareParticipant | null;
   onClose: () => void;
   isHostViewer?: boolean;
+  /** Lider veya sahip — moderasyon */
+  canModerate?: boolean;
+  isOwnerViewer?: boolean;
   onHostMute?: (userId: string) => void;
   onHostStand?: (userId: string) => void;
   onHostKick?: (userId: string) => void;
+  onGrantMic?: (userId: string) => void;
+  onRevokeMic?: (userId: string) => void;
+  onGrantScreen?: (userId: string) => void;
+  onRevokeScreen?: (userId: string) => void;
+  onAssignLeader?: (userId: string) => void;
+  onClearLeader?: (userId: string) => void;
+  targetIsLeader?: boolean;
 };
 
 /** Alttan yukarı kayan profil kartı — video avatar tıklanınca. */
@@ -37,9 +48,18 @@ export function ScreenShareProfileSheet({
   participant,
   onClose,
   isHostViewer = false,
+  canModerate = false,
+  isOwnerViewer = false,
   onHostMute,
   onHostStand,
   onHostKick,
+  onGrantMic,
+  onRevokeMic,
+  onGrantScreen,
+  onRevokeScreen,
+  onAssignLeader,
+  onClearLeader,
+  targetIsLeader = false,
 }: Props) {
   const visible = participant != null;
   const { colors } = useTheme();
@@ -94,7 +114,7 @@ export function ScreenShareProfileSheet({
               backgroundColor: colors.surface,
               borderColor: colors.border,
               paddingBottom: Math.max(insets.bottom, spacing.md),
-              maxHeight: height * 0.55,
+              maxHeight: height * 0.72,
             },
           ]}
           onPress={(e) => e.stopPropagation()}
@@ -110,7 +130,14 @@ export function ScreenShareProfileSheet({
           {loading && !author ? (
             <ActivityIndicator color={SCREEN_SHARE_ACCENT} style={{ marginVertical: 28 }} />
           ) : author ? (
-            <View style={styles.body}>
+            <ScrollView
+              style={styles.bodyScroll}
+              contentContainerStyle={styles.body}
+              showsVerticalScrollIndicator
+              bounces
+              keyboardShouldPersistTaps="handled"
+              nestedScrollEnabled
+            >
               <Pressable onPress={openFullProfile} style={styles.identity}>
                 {author.avatarUrl ? (
                   <OptimizedImage
@@ -132,7 +159,12 @@ export function ScreenShareProfileSheet({
                 <Text style={{ color: colors.textSecondary }}>@{author.username}</Text>
                 {participant?.isHost ? (
                   <View style={styles.hostPill}>
-                    <Text style={styles.hostText}>HOST</Text>
+                    <Text style={styles.hostText}>SAHİP</Text>
+                  </View>
+                ) : null}
+                {targetIsLeader ? (
+                  <View style={[styles.hostPill, { backgroundColor: 'rgba(232,200,114,0.22)' }]}>
+                    <Text style={[styles.hostText, { color: '#E8C872' }]}>LİDER</Text>
                   </View>
                 ) : null}
               </Pressable>
@@ -147,8 +179,86 @@ export function ScreenShareProfileSheet({
                 />
               ) : null}
 
-              {isHostViewer && user?.id !== author.id && !participant?.isHost ? (
+              {(canModerate || isHostViewer || isOwnerViewer) &&
+              user?.id !== author.id &&
+              !participant?.isHost ? (
                 <View style={styles.hostActions}>
+                  {onAssignLeader && !targetIsLeader ? (
+                    <Pressable
+                      style={styles.hostActionBtn}
+                      onPress={() => {
+                        onAssignLeader(author.id);
+                        onClose();
+                      }}
+                    >
+                      <Ionicons name="diamond-outline" size={16} color="#E8C872" />
+                      <Text style={[styles.hostActionText, { color: '#E8C872' }]}>
+                        Lider yetkisi ver
+                      </Text>
+                    </Pressable>
+                  ) : null}
+                  {onClearLeader && targetIsLeader ? (
+                    <Pressable
+                      style={styles.hostActionBtn}
+                      onPress={() => {
+                        onClearLeader(author.id);
+                        onClose();
+                      }}
+                    >
+                      <Ionicons name="diamond" size={16} color="#E8C872" />
+                      <Text style={[styles.hostActionText, { color: '#E8C872' }]}>
+                        Lider yetkisini al
+                      </Text>
+                    </Pressable>
+                  ) : null}
+                  {onGrantMic ? (
+                    <Pressable
+                      style={styles.hostActionBtn}
+                      onPress={() => {
+                        onGrantMic(author.id);
+                        onClose();
+                      }}
+                    >
+                      <Ionicons name="mic" size={16} color="#F4F7FB" />
+                      <Text style={styles.hostActionText}>Mik izni ver</Text>
+                    </Pressable>
+                  ) : null}
+                  {onRevokeMic ? (
+                    <Pressable
+                      style={styles.hostActionBtn}
+                      onPress={() => {
+                        onRevokeMic(author.id);
+                        onClose();
+                      }}
+                    >
+                      <Ionicons name="mic-off" size={16} color="#F4F7FB" />
+                      <Text style={styles.hostActionText}>Mik iznini al</Text>
+                    </Pressable>
+                  ) : null}
+                  {onGrantScreen ? (
+                    <Pressable
+                      style={styles.hostActionBtn}
+                      onPress={() => {
+                        onGrantScreen(author.id);
+                        onClose();
+                      }}
+                    >
+                      <Ionicons name="desktop-outline" size={16} color="#F4F7FB" />
+                      <Text style={styles.hostActionText}>Ekran izni ver</Text>
+                    </Pressable>
+                  ) : null}
+                  {onRevokeScreen ? (
+                    <Pressable
+                      style={styles.hostActionBtn}
+                      onPress={() => {
+                        onRevokeScreen(author.id);
+                        onClose();
+                      }}
+                    >
+                      <Ionicons name="desktop" size={16} color="#F4F7FB" />
+                      <Text style={styles.hostActionText}>Ekran iznini al</Text>
+                    </Pressable>
+                  ) : null}
                   {onHostMute ? (
                     <Pressable
                       style={styles.hostActionBtn}
@@ -157,7 +267,7 @@ export function ScreenShareProfileSheet({
                         onClose();
                       }}
                     >
-                      <Ionicons name="mic-off" size={16} color="#F4F7FB" />
+                      <Ionicons name="volume-mute" size={16} color="#F4F7FB" />
                       <Text style={styles.hostActionText}>Sessize al</Text>
                     </Pressable>
                   ) : null}
@@ -173,7 +283,7 @@ export function ScreenShareProfileSheet({
                       <Text style={styles.hostActionText}>Koltuktan indir</Text>
                     </Pressable>
                   ) : null}
-                  {onHostKick ? (
+                  {isOwnerViewer && onHostKick ? (
                     <Pressable
                       style={[styles.hostActionBtn, styles.hostActionDanger]}
                       onPress={() => {
@@ -194,7 +304,7 @@ export function ScreenShareProfileSheet({
                 </Text>
                 <Ionicons name="chevron-forward" size={16} color={SCREEN_SHARE_ACCENT} />
               </Pressable>
-            </View>
+            </ScrollView>
           ) : (
             <Text style={{ color: colors.danger, textAlign: 'center', marginVertical: 24 }}>
               Profil bulunamadı
@@ -233,6 +343,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   title: { fontSize: 16, fontWeight: '800' },
+  bodyScroll: { flexGrow: 0, flexShrink: 1 },
   body: { alignItems: 'center', gap: spacing.md, paddingBottom: spacing.sm },
   identity: { alignItems: 'center', gap: spacing.xs, width: '100%' },
   avatar: {

@@ -25,6 +25,7 @@ type SessionRow = {
   ended_at: string | null;
   password_hash?: string | null;
   has_password?: boolean;
+  is_hidden?: boolean;
   is_host?: boolean;
   preview_members?: PreviewMemberRow[] | null;
   cover_image_url?: string | null;
@@ -56,6 +57,7 @@ function mapSession(row: SessionRow): ScreenShareSession {
     createdAt: row.created_at,
     endedAt: row.ended_at,
     hasPassword: Boolean(row.has_password ?? row.password_hash),
+    isHidden: Boolean(row.is_hidden),
     isHost: row.is_host,
     previewMembers: mapPreviewMembers(row.preview_members),
     coverImageUrl: row.cover_image_url ?? null,
@@ -91,19 +93,25 @@ export async function createScreenShareSession(
   password?: string | null,
   coverImageUrl?: string | null,
   replaceExisting = false,
+  isHidden = false,
 ): Promise<ScreenShareSession> {
   const { data, error } = await supabase.rpc('create_screen_share_session', {
     p_title: title ?? null,
     p_password: password?.trim() ? password.trim() : null,
     p_cover_image_url: coverImageUrl?.trim() ? coverImageUrl.trim() : null,
     p_replace_existing: replaceExisting,
+    p_is_hidden: isHidden,
   });
   if (error) {
     const msg = supabaseErrorMessage(error);
     if (msg.includes('HAS_OPEN_ROOM')) throw new ScreenShareHasOpenRoomError();
     throw new Error(msg);
   }
-  return mapSession({ ...data, has_password: Boolean(password?.trim()) });
+  return mapSession({
+    ...data,
+    has_password: Boolean(password?.trim()),
+    is_hidden: isHidden || Boolean((data as SessionRow | null)?.is_hidden),
+  });
 }
 
 export async function listPublicScreenShareSessions(
@@ -272,6 +280,38 @@ export async function setScreenSharePassword(
   return mapSession({ ...data, has_password: Boolean(password?.trim()) });
 }
 
+export async function setScreenShareHidden(
+  sessionId: string,
+  hidden: boolean,
+): Promise<ScreenShareSession> {
+  const { data, error } = await supabase.rpc('set_screen_share_hidden', {
+    p_session_id: sessionId,
+    p_hidden: hidden,
+  });
+  if (error) throw new Error(supabaseErrorMessage(error));
+  return mapSession({ ...data, is_hidden: hidden });
+}
+
+export async function setScreenShareRoomPolicy(
+  sessionId: string,
+  patch: {
+    leaderLocked?: boolean;
+    micAutoApprove?: boolean;
+    leaderUserId?: string | null;
+    clearLeader?: boolean;
+  },
+): Promise<ScreenShareSession> {
+  const { data, error } = await supabase.rpc('set_screen_share_room_policy', {
+    p_session_id: sessionId,
+    p_leader_locked: patch.leaderLocked ?? null,
+    p_mic_auto_approve: patch.micAutoApprove ?? null,
+    p_leader_user_id: patch.leaderUserId ?? null,
+    p_clear_leader: Boolean(patch.clearLeader),
+  });
+  if (error) throw new Error(supabaseErrorMessage(error));
+  return mapSession(data);
+}
+
 export async function kickScreenShareParticipant(
   sessionId: string,
   userId: string,
@@ -320,6 +360,8 @@ export async function listMyScreenShareSessions(): Promise<ScreenShareSession[]>
 }
 
 export async function fetchScreenShareSession(sessionId: string): Promise<ScreenShareSession | null> {
+  // is_hidden seçilmez — PostgREST cache yarışında odaya girişi kilitlemesin;
+  // join / set_screen_share_hidden RPC sonrası gerçek değer gelir.
   const { data, error } = await supabase
     .from('screen_share_sessions')
     .select(
@@ -327,18 +369,24 @@ export async function fetchScreenShareSession(sessionId: string): Promise<Screen
     )
     .eq('id', sessionId)
     .maybeSingle();
-  if (error) throw new Error(supabaseErrorMessage(error));
+  if (error) throw new Error(supabaseErrorMessage(error) ?? 'Oda bilgisi alınamadı');
   if (!data) return null;
-  return mapSession(data);
+  return mapSession({ ...data, is_hidden: false });
 }
 
 export async function fetchLiveKitScreenShareToken(
   sessionId: string,
 ): Promise<ScreenShareTokenResponse> {
-  const { data, error } = await supabase.functions.invoke<ScreenShareTokenResponse>('livekit-token', {
-    body: { kind: 'screen_share', sessionId },
-  });
-  if (error) throw error;
-  if (!data?.token) throw new Error('LiveKit token alınamadı');
+  const { data, error } = await supabase.functions.invoke<ScreenShareTokenResponse & { error?: string }>(
+    'livekit-token',
+    { body: { kind: 'screen_share', sessionId } },
+  );
+  if (error || !data?.token) {
+    const { edgeFunctionErrorMessage } = await import('@/lib/errors');
+    const msg = await edgeFunctionErrorMessage(error, data, {
+      fallback: 'Odaya bağlanılamadı. Linki yeniden dene.',
+    });
+    throw new Error(msg);
+  }
   return data;
 }

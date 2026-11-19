@@ -6,6 +6,9 @@ export const SCREEN_SHARE_FEATURE = {
 /** Modern teal — şehir sisteminden bağımsız marka rengi */
 export const SCREEN_SHARE_ACCENT = '#00C2A8';
 
+/** Oda zemin / status bar / header — tek renk (üst şerit siyah kalmasın) */
+export const SCREEN_SHARE_ROOM_BG = '#0E1420';
+
 export const SCREEN_SHARE_DRM_HINT =
   'Netflix vb. korumalı uygulamalar siyah görünebilir (işletim sistemi kısıtı).';
 

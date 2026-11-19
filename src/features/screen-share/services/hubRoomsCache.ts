@@ -7,8 +7,11 @@ type HubRoomsSnapshot = {
   fetchedAt: number;
 };
 
-/** Odaklanınca ağ çağrısı atlama — fatura + hız. */
-export const HUB_ROOMS_FRESH_MS = 45_000;
+/**
+ * Odaklanınca soft-refresh için kısa TTL.
+ * Create/join sonrası invalidate edilir — yeni oda anında görünür.
+ */
+export const HUB_ROOMS_FRESH_MS = 12_000;
 
 let snapshot: HubRoomsSnapshot | null = null;
 
@@ -24,4 +27,26 @@ export function isHubRoomsCacheFresh(maxAgeMs = HUB_ROOMS_FRESH_MS): boolean {
 
 export function writeHubRoomsCache(next: Omit<HubRoomsSnapshot, 'fetchedAt'>): void {
   snapshot = { ...next, fetchedAt: Date.now() };
+}
+
+/** Create / join / delete sonrası — sonraki focus ağdan çeker. */
+export function invalidateHubRoomsCache(): void {
+  snapshot = null;
+}
+
+/** Optimistic: oda açılınca kendi listene hemen yaz. */
+export function upsertHubMyRoom(session: ScreenShareSession): void {
+  const prev = snapshot;
+  const myRooms = [
+    session,
+    ...(prev?.myRooms ?? []).filter((r) => r.id !== session.id),
+  ];
+  snapshot = {
+    myRooms,
+    publicRooms: (prev?.publicRooms ?? []).filter(
+      (r) => r.id !== session.id && r.hostUserId !== session.hostUserId,
+    ),
+    visitedRooms: (prev?.visitedRooms ?? []).filter((r) => r.id !== session.id),
+    fetchedAt: 0,
+  };
 }

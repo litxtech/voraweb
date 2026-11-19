@@ -221,7 +221,7 @@ const styles = StyleSheet.create({
     borderRadius: 0,
     overflow: 'hidden',
   },
-  video: { width: '100%', height: '100%', minHeight: 220 },
+  video: { width: '100%', height: '100%', minHeight: 0 },
   reconnectOverlay: {
     position: 'absolute',
     top: 12,
@@ -259,7 +259,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 10,
     right: 10,
-    bottom: 56,
+    bottom: 42,
     backgroundColor: 'rgba(0,0,0,0.62)',
     borderRadius: 12,
     paddingHorizontal: 12,

@@ -17,13 +17,23 @@ type ScreenShareToolbarProps = {
   onDelete?: () => void;
   onMembers: () => void;
   onPassword?: () => void;
+  onToggleHidden?: () => void;
+  isHidden?: boolean;
   onYoutube?: () => void;
   onFullscreen?: () => void;
   isHost: boolean;
+  /** Lider koltuğundaki / atanan lider — video + ayarlar */
+  isLeader?: boolean;
+  canModerate?: boolean;
+  micOk?: boolean;
+  micAuto?: boolean;
+  /** Admin / lider / ekran izni */
+  canShareScreen?: boolean;
+  leaderLocked?: boolean;
+  onToggleMicAuto?: () => void;
+  onToggleLeaderLock?: () => void;
   memberCount: number;
   compact?: boolean;
-  /** Paylaş butonunu dock'ta göster (dokunma alanı net) */
-  showShare?: boolean;
 };
 
 type DockBtnProps = {
@@ -37,6 +47,8 @@ type DockBtnProps = {
 
 function DockBtn({ icon, label, onPress, danger, active, primary }: DockBtnProps) {
   const { colors } = useTheme();
+  const tint =
+    danger ? colors.danger : active || primary ? SCREEN_SHARE_ACCENT : '#E8EEF5';
   return (
     <Pressable
       onPress={onPress}
@@ -45,30 +57,23 @@ function DockBtn({ icon, label, onPress, danger, active, primary }: DockBtnProps
       accessibilityLabel={label}
       style={({ pressed }) => [
         styles.btn,
-        primary && styles.btnPrimary,
-        active && styles.btnActive,
+        styles.btnShadow,
         danger && styles.btnDanger,
-        { opacity: pressed ? 0.75 : 1 },
+        { opacity: pressed ? 0.78 : 1 },
       ]}
     >
-      <Ionicons
-        name={icon}
-        size={primary ? 18 : 16}
-        color={
-          danger
-            ? colors.danger
-            : active || primary
-              ? SCREEN_SHARE_ACCENT
-              : '#E8EEF5'
-        }
-      />
+      <View
+        style={[
+          styles.iconHalo,
+          (active || primary) && !danger ? styles.iconHaloActive : null,
+          danger ? styles.iconHaloDanger : null,
+        ]}
+      >
+        <Ionicons name={icon} size={primary ? 20 : 18} color={tint} />
+      </View>
       {label ? (
         <Text
-          style={[
-            styles.btnLabel,
-            (active || primary) && { color: SCREEN_SHARE_ACCENT },
-            danger && { color: colors.danger },
-          ]}
+          style={[styles.btnLabel, danger && { color: colors.danger }]}
           numberOfLines={1}
         >
           {label}
@@ -85,11 +90,20 @@ export function ScreenShareToolbar({
   onDelete,
   onMembers,
   onPassword,
+  onToggleHidden,
+  isHidden = false,
   onYoutube,
   onFullscreen,
   isHost,
+  isLeader = false,
+  canModerate = false,
+  micOk = true,
+  micAuto = true,
+  canShareScreen = false,
+  leaderLocked = true,
+  onToggleMicAuto,
+  onToggleLeaderLock,
   memberCount,
-  showShare = false,
 }: ScreenShareToolbarProps) {
   const room = useRoomContext();
   const connectionState = useConnectionState();
@@ -99,6 +113,7 @@ export function ScreenShareToolbar({
   const [moreOpen, setMoreOpen] = useState(false);
   const sharing = Boolean(isScreenShareEnabled);
   const roomReady = connectionState === ConnectionState.Connected;
+  const canBroadcast = isHost || isLeader || canShareScreen;
 
   const toggleMic = useCallback(async () => {
     if (!room) return;
@@ -109,17 +124,24 @@ export function ScreenShareToolbar({
         Alert.alert('Mikrofon', 'Bağlantı kurulamadı — tekrar dene');
         return;
       }
+      if (!isMicrophoneEnabled && !micOk) {
+        Alert.alert('Mikrofon', 'Konuşmak için liderden mikrofon izni gerekli');
+        return;
+      }
       await localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled);
     } catch (err) {
       Alert.alert('Mikrofon', err instanceof Error ? err.message : 'Açılamadı');
     } finally {
       setBusy(false);
     }
-  }, [isMicrophoneEnabled, localParticipant, room, roomReady]);
+  }, [isMicrophoneEnabled, localParticipant, room, roomReady, micOk]);
 
   const toggleShare = useCallback(async () => {
-    if (!isHost) {
-      Alert.alert('Ekran', 'Yalnızca oda sahibi ekran paylaşabilir');
+    if (!canBroadcast) {
+      Alert.alert(
+        'Ekran',
+        'Ekran paylaşımı için oda admininin Lider veya Ekran yetkisi vermesi gerekir',
+      );
       return;
     }
     if (!room) return;
@@ -150,26 +172,23 @@ export function ScreenShareToolbar({
     } finally {
       setBusy(false);
     }
-  }, [isHost, room, roomReady, sharing]);
+  }, [canBroadcast, room, roomReady, sharing]);
 
   return (
     <View style={styles.wrap} pointerEvents="box-none">
-      {Platform.OS === 'ios' && isHost ? (
+      {Platform.OS === 'ios' && canBroadcast ? (
         <ScreenCapturePickerView ref={pickerRef} style={styles.picker} />
       ) : null}
 
       <View style={styles.dock}>
         <DockBtn
           icon={isMicrophoneEnabled ? 'mic' : 'mic-off'}
-          label={isMicrophoneEnabled ? 'Ses' : 'Kapalı'}
+          label={!micOk ? 'İzin yok' : isMicrophoneEnabled ? 'Ses' : 'Kapalı'}
           onPress={() => void toggleMic()}
           active={isMicrophoneEnabled}
           primary
         />
-        {showShare ? (
-          <DockBtn icon="share-social" label="Paylaş" onPress={onCopyCode} />
-        ) : null}
-        {isHost ? (
+        {canBroadcast ? (
           <DockBtn
             icon={sharing ? 'stop-circle' : 'desktop-outline'}
             label={sharing ? 'Durdur' : 'Ekran'}
@@ -196,7 +215,7 @@ export function ScreenShareToolbar({
           <Pressable style={styles.moreSheet} onPress={(e) => e.stopPropagation()}>
             <View style={styles.moreHandle} />
             <Text style={styles.moreTitle}>Oda</Text>
-            {isHost ? (
+            {canBroadcast ? (
               <MoreRow
                 icon="logo-youtube"
                 label="YouTube"
@@ -206,9 +225,39 @@ export function ScreenShareToolbar({
                 }}
               />
             ) : null}
+            {canModerate ? (
+              <MoreRow
+                icon={micAuto ? 'mic' : 'mic-off'}
+                label={micAuto ? 'Mik: otomatik açık' : 'Mik: onay gerekli'}
+                onPress={() => {
+                  setMoreOpen(false);
+                  onToggleMicAuto?.();
+                }}
+              />
+            ) : null}
+            {canModerate ? (
+              <MoreRow
+                icon={leaderLocked ? 'lock-closed' : 'lock-open-outline'}
+                label={leaderLocked ? 'Lider koltuğu kilitli' : 'Lider koltuğu açık'}
+                onPress={() => {
+                  setMoreOpen(false);
+                  onToggleLeaderLock?.();
+                }}
+              />
+            ) : null}
             <MoreRow icon="key-outline" label="Oda kodu" onPress={() => { setMoreOpen(false); onCopyCode(); }} />
             {isHost ? (
               <MoreRow icon="lock-closed-outline" label="Şifre" onPress={() => { setMoreOpen(false); onPassword?.(); }} />
+            ) : null}
+            {isHost ? (
+              <MoreRow
+                icon={isHidden ? 'eye-outline' : 'eye-off-outline'}
+                label={isHidden ? 'Herkese aç' : 'Gizle'}
+                onPress={() => {
+                  setMoreOpen(false);
+                  onToggleHidden?.();
+                }}
+              />
             ) : null}
             <MoreRow icon="exit-outline" label="Ayrıl" onPress={() => { setMoreOpen(false); onLeave(); }} />
             {isHost ? (
@@ -268,23 +317,50 @@ const styles = StyleSheet.create({
   },
   btn: {
     minWidth: 52,
-    minHeight: 48,
+    minHeight: 52,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 2,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 14,
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: 'transparent',
   },
-  btnPrimary: {
-    backgroundColor: `${SCREEN_SHARE_ACCENT}22`,
+  btnShadow: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.45,
+    shadowRadius: 10,
+    elevation: 8,
   },
-  btnActive: {
-    backgroundColor: `${SCREEN_SHARE_ACCENT}28`,
+  iconHalo: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.1)',
+    // Simge etrafında yumuşak gölge — dolgu boyası yok
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.35,
+    shadowRadius: 6,
+    elevation: 4,
   },
-  btnDanger: {
-    backgroundColor: 'rgba(255,80,80,0.12)',
+  iconHaloActive: {
+    borderColor: `${SCREEN_SHARE_ACCENT}55`,
+    shadowColor: SCREEN_SHARE_ACCENT,
+    shadowOpacity: 0.55,
+    shadowRadius: 8,
   },
+  iconHaloDanger: {
+    borderColor: 'rgba(255,80,80,0.35)',
+    shadowColor: '#FF5050',
+    shadowOpacity: 0.4,
+  },
+  btnDanger: {},
   btnLabel: {
     color: '#A8B4C4',
     fontSize: 10,

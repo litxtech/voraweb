@@ -1,4 +1,5 @@
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { OptimizedImage } from '@/components/media/OptimizedImage';
 import { Text } from '@/components/ui/Text';
 import { SCREEN_SHARE_ACCENT } from '@/features/screen-share/constants';
@@ -43,6 +44,11 @@ export function ScreenShareVisitedStrip({ rooms, onOpen }: Props) {
                   </View>
                 )}
                 <View style={styles.liveDot} />
+                {room.hasPassword ? (
+                  <View style={styles.lockDot}>
+                    <Ionicons name="lock-closed" size={8} color="#1A1408" />
+                  </View>
+                ) : null}
               </View>
               <Text style={styles.name} numberOfLines={1}>
                 {room.hostUsername ? `@${room.hostUsername}` : room.title}
@@ -92,6 +98,19 @@ const styles = StyleSheet.create({
     height: 10,
     borderRadius: 5,
     backgroundColor: '#28C840',
+    borderWidth: 1.5,
+    borderColor: '#05070A',
+  },
+  lockDot: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#E8C872',
+    alignItems: 'center',
+    justifyContent: 'center',
     borderWidth: 1.5,
     borderColor: '#05070A',
   },

@@ -17,11 +17,11 @@ import {
 const PUBLISH_RETRIES = [0, 400];
 
 /**
- * Host YouTube seçimini odaya anında yayar (data + attribute).
- * Host odadan çıkınca stop yayılır; izleyiciler host disconnect olunca videoyu kapatır.
+ * Lider/sahip YouTube seçimini odaya anında yayar (data + attribute).
+ * Lider odadan çıkınca stop yayılır; izleyiciler lider disconnect olunca videoyu kapatır.
  * Aktif video yokken / oda kapalıyken trafik yok.
  */
-export function useScreenShareYoutubeSync(isHost: boolean, hostUserId?: string | null) {
+export function useScreenShareYoutubeSync(isLeader: boolean, hostUserId?: string | null) {
   const room = useRoomContext();
   const [active, setActive] = useState<YoutubeSearchHit | null>(null);
   const activeRef = useRef<YoutubeSearchHit | null>(null);
@@ -64,7 +64,7 @@ export function useScreenShareYoutubeSync(isHost: boolean, hostUserId?: string |
 
   const persistAttribute = useCallback(
     async (payload: SharedYoutubePayload | null) => {
-      if (!room?.localParticipant || !isHost) return;
+      if (!room?.localParticipant || !isLeader) return;
       try {
         await room.localParticipant.setAttributes({
           [SCREEN_SHARE_YOUTUBE_ATTR]: payload ? JSON.stringify(payload) : '',
@@ -73,7 +73,7 @@ export function useScreenShareYoutubeSync(isHost: boolean, hostUserId?: string |
         // canUpdateOwnMetadata yoksa data channel yeterli
       }
     },
-    [room, isHost],
+    [room, isLeader],
   );
 
   const fanout = useCallback(
@@ -144,7 +144,7 @@ export function useScreenShareYoutubeSync(isHost: boolean, hostUserId?: string |
 
     /** Sadece aktif video varken ve yeni biri / reconnect olunca — interval yok. */
     const rebroadcastIfHost = () => {
-      if (!isHost) return;
+      if (!isLeader) return;
       const current = activeRef.current;
       if (!current?.startedAt) return;
       void publishData(hitToPlayPayload(current, current.startedAt));
@@ -162,7 +162,7 @@ export function useScreenShareYoutubeSync(isHost: boolean, hostUserId?: string |
 
     /** Host ayrılınca izleyicilerdeki YouTube anında bitsin (stop paketi gelmese bile). */
     const onParticipantDisconnected = (participant: RemoteParticipant) => {
-      if (isHost) return;
+      if (isLeader) return;
       if (!hostUserId || participant.identity !== hostUserId) return;
       lastStartedAtRef.current = Date.now();
       setActive(null);
@@ -188,7 +188,7 @@ export function useScreenShareYoutubeSync(isHost: boolean, hostUserId?: string |
       room.off(RoomEvent.Connected, onConnected);
       room.off(RoomEvent.Reconnected, onConnected);
     };
-  }, [room, isHost, hostUserId, applyPayload, publishData, readAttrFromParticipant]);
+  }, [room, isLeader, hostUserId, applyPayload, publishData, readAttrFromParticipant]);
 
   return { active, share, stop };
 }

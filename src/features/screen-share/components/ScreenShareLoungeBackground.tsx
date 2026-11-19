@@ -1,4 +1,5 @@
 import { StyleSheet, View } from 'react-native';
+import { SCREEN_SHARE_ROOM_BG } from '@/features/screen-share/constants';
 
 /** Düz oda zemin — simge / ışık / desen yok. */
 export function ScreenShareLoungeBackground() {
@@ -6,5 +7,5 @@ export function ScreenShareLoungeBackground() {
 }
 
 const styles = StyleSheet.create({
-  plain: { backgroundColor: '#0E1420' },
+  plain: { backgroundColor: SCREEN_SHARE_ROOM_BG },
 });

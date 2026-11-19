@@ -18,17 +18,23 @@ type Props = {
   visible: boolean;
   busy?: boolean;
   onClose: () => void;
-  onSubmit: (input: { password: string | null; coverUri: string | null }) => void;
+  onSubmit: (input: {
+    password: string | null;
+    coverUri: string | null;
+    isHidden: boolean;
+  }) => void;
 };
 
 export function ScreenShareCreateSheet({ visible, busy = false, onClose, onSubmit }: Props) {
   const [password, setPassword] = useState('');
   const [coverUri, setCoverUri] = useState<string | null>(null);
+  const [isHidden, setIsHidden] = useState(false);
 
   useEffect(() => {
     if (visible) {
       setPassword('');
       setCoverUri(null);
+      setIsHidden(false);
     }
   }, [visible]);
 
@@ -55,7 +61,8 @@ export function ScreenShareCreateSheet({ visible, busy = false, onClose, onSubmi
         <Pressable style={styles.card} onPress={(e) => e.stopPropagation()}>
           <Text style={styles.title}>Yeni pencere</Text>
           <Text style={styles.subtitle}>
-            İstersen kapak resmi ve şifre ekle. Kapak yoksa listenin içinde avatarın görünür.
+            İstersen kapak, şifre veya gizlilik ekle. Gizli odalar listede görünmez; paylaştığın
+            link ile girilir.
           </Text>
 
           <Pressable
@@ -94,8 +101,34 @@ export function ScreenShareCreateSheet({ visible, busy = false, onClose, onSubmi
           />
 
           <Pressable
+            disabled={busy}
+            onPress={() => setIsHidden((v) => !v)}
+            style={({ pressed }) => [
+              styles.hideToggle,
+              isHidden && styles.hideToggleOn,
+              pressed && { opacity: 0.88 },
+            ]}
+          >
+            <Ionicons
+              name={isHidden ? 'eye-off' : 'eye-outline'}
+              size={18}
+              color={isHidden ? '#FFD28A' : SCREEN_SHARE_ACCENT}
+            />
+            <View style={styles.hideCopy}>
+              <Text style={[styles.hideTitle, isHidden && styles.hideTitleOn]}>
+                {isHidden ? 'Gizli oda' : 'Listede görünsün'}
+              </Text>
+              <Text style={styles.hideHint}>
+                {isHidden
+                  ? 'Açık odalarda görünmez · paylaşım linki ile girilir'
+                  : 'Herkes açık odalar listesinde görebilir'}
+              </Text>
+            </View>
+          </Pressable>
+
+          <Pressable
             disabled={busy || !passwordOk}
-            onPress={() => onSubmit({ password: trimmed || null, coverUri })}
+            onPress={() => onSubmit({ password: trimmed || null, coverUri, isHidden })}
             style={({ pressed }) => [
               styles.primary,
               { opacity: pressed || busy || !passwordOk ? 0.75 : 1 },
@@ -110,7 +143,7 @@ export function ScreenShareCreateSheet({ visible, busy = false, onClose, onSubmi
 
           <Pressable
             disabled={busy}
-            onPress={() => onSubmit({ password: null, coverUri })}
+            onPress={() => onSubmit({ password: null, coverUri, isHidden })}
             style={styles.ghost}
           >
             <Text style={styles.ghostText}>Şifresiz oluştur</Text>
@@ -173,6 +206,25 @@ const styles = StyleSheet.create({
     backgroundColor: '#0A0E14',
     fontSize: 16,
   },
+  hideToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: 'rgba(10,14,20,0.8)',
+  },
+  hideToggleOn: {
+    borderColor: 'rgba(255,210,138,0.35)',
+    backgroundColor: 'rgba(255,210,138,0.08)',
+  },
+  hideCopy: { flex: 1, gap: 2 },
+  hideTitle: { color: '#E8EEF5', fontWeight: '700', fontSize: 14 },
+  hideTitleOn: { color: '#FFD28A' },
+  hideHint: { color: '#7A8A9C', fontSize: 12, lineHeight: 16 },
   primary: {
     minHeight: 48,
     borderRadius: 14,

@@ -16,6 +16,8 @@ type Props = {
   grid?: boolean;
   /** Üst lider koltuğu */
   leader?: boolean;
+  /** Lider koltuğu kilitli */
+  locked?: boolean;
 };
 
 const AVATAR = 56;
@@ -24,7 +26,15 @@ const AVATAR_RAIL = 42;
 const AVATAR_LEADER = 62;
 
 /** Gerçekçi premium koltuk — arkalık + kolçak + minder + avatar. */
-export function ScreenShareSeat({ member, empty, onPress, rail, grid, leader }: Props) {
+export function ScreenShareSeat({
+  member,
+  empty,
+  onPress,
+  rail,
+  grid,
+  leader,
+  locked,
+}: Props) {
   const size = leader ? AVATAR_LEADER : rail ? AVATAR_RAIL : grid ? AVATAR_GRID : AVATAR;
   const seatStyle = [
     styles.seat,
@@ -48,15 +58,15 @@ export function ScreenShareSeat({ member, empty, onPress, rail, grid, leader }: 
   ];
 
   if (empty || !member) {
-    return (
-      <View style={seatStyle}>
+    const body = (
+      <>
         <View style={[...chairStyle, styles.chairEmpty, leader && styles.chairHost]}>
           <View style={[...backrestStyle, styles.backrestEmpty, leader && styles.backrestLeaderEmpty]} />
           <View style={[styles.arms, rail && styles.armsRail]}>
             <View style={[...armStyle, styles.armEmpty, leader && styles.armHost]} />
             <View style={[...cushionStyle, styles.cushionEmpty, leader && styles.cushionHost]}>
               <Ionicons
-                name={leader ? 'diamond-outline' : 'add'}
+                name={locked ? 'lock-closed' : leader ? 'diamond-outline' : 'add'}
                 size={rail ? 14 : leader ? 20 : 16}
                 color={leader ? 'rgba(232,200,114,0.55)' : 'rgba(255,255,255,0.28)'}
               />
@@ -66,17 +76,31 @@ export function ScreenShareSeat({ member, empty, onPress, rail, grid, leader }: 
         </View>
         {!rail ? (
           <Text style={[styles.emptyLabel, leader && styles.emptyLeaderLabel]}>
-            {leader ? 'Lider' : 'Boş'}
+            {locked ? 'Kilitli' : leader ? 'Lider' : 'Boş'}
           </Text>
         ) : null}
-      </View>
+      </>
     );
+    if (onPress && !locked) {
+      return (
+        <Pressable
+          onPress={onPress}
+          accessibilityRole="button"
+          accessibilityLabel={leader ? 'Lider koltuğuna otur' : 'Koltuga otur'}
+          hitSlop={6}
+          style={({ pressed }) => [...seatStyle, { opacity: pressed ? 0.85 : 1 }]}
+        >
+          {body}
+        </Pressable>
+      );
+    }
+    return <View style={seatStyle}>{body}</View>;
   }
 
   const initial = (member.username || '?').slice(0, 1).toUpperCase();
   const speaking = member.isSpeaking;
   const micOff = !member.micEnabled;
-  const host = member.isHost || Boolean(leader);
+  const host = member.isLeader || member.isHost || Boolean(leader);
 
   return (
     <Pressable

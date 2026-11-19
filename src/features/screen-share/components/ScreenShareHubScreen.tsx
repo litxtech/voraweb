@@ -1,7 +1,8 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  AppState,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -42,30 +43,49 @@ import {
   ScreenSharePasswordRequiredError,
 } from '@/features/screen-share/services/screenShareSessionService';
 import {
-  isHubRoomsCacheFresh,
+  invalidateHubRoomsCache,
   readHubRoomsCache,
+  upsertHubMyRoom,
   writeHubRoomsCache,
 } from '@/features/screen-share/services/hubRoomsCache';
+import { subscribeHubRoomsRealtime } from '@/features/screen-share/services/hubRoomsRealtime';
 import { uploadScreenShareCover } from '@/features/screen-share/services/uploadScreenShareCover';
 import { SCREEN_SHARE_SAMPLE_ROOMS } from '@/features/screen-share/samples';
 import type { ScreenShareSession } from '@/features/screen-share/types';
 import { spacing } from '@/constants/theme';
 import { useAuth } from '@/providers/AuthProvider';
 
-type PendingCreate = { password: string | null; coverUri: string | null };
+/** Hub açıkken yeni pencere kaçmasın — realtime yedek. */
+const HUB_POLL_MS = 8_000;
+const HUB_REALTIME_DEBOUNCE_MS = 700;
 
-const cachedHub = readHubRoomsCache();
+type PendingCreate = {
+  password: string | null;
+  coverUri: string | null;
+  isHidden: boolean;
+};
+
+function hydrateFromHubCache() {
+  const cached = readHubRoomsCache();
+  return {
+    myRooms: cached?.myRooms ?? [],
+    publicRooms: cached?.publicRooms ?? [],
+    visitedRooms: cached?.visitedRooms ?? [],
+    hasCache: Boolean(cached),
+  };
+}
 
 export function ScreenShareHubScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const [busy, setBusy] = useState<'create' | 'join' | 'invite' | string | null>(null);
-  const [myRooms, setMyRooms] = useState<ScreenShareSession[]>(cachedHub?.myRooms ?? []);
-  const [publicRooms, setPublicRooms] = useState<ScreenShareSession[]>(cachedHub?.publicRooms ?? []);
+  const initialCache = hydrateFromHubCache();
+  const [myRooms, setMyRooms] = useState<ScreenShareSession[]>(initialCache.myRooms);
+  const [publicRooms, setPublicRooms] = useState<ScreenShareSession[]>(initialCache.publicRooms);
   const [visitedRooms, setVisitedRooms] = useState<ScreenShareSession[]>(
-    cachedHub?.visitedRooms ?? [],
+    initialCache.visitedRooms,
   );
-  const [listLoading, setListLoading] = useState(!cachedHub);
+  const [listLoading, setListLoading] = useState(!initialCache.hasCache);
   const [refreshing, setRefreshing] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [joinCodeOpen, setJoinCodeOpen] = useState(false);
@@ -76,6 +96,7 @@ export function ScreenShareHubScreen() {
   const [replaceConfirmOpen, setReplaceConfirmOpen] = useState(false);
   const [safetyRoom, setSafetyRoom] = useState<ScreenShareSession | null>(null);
   const [reportRoom, setReportRoom] = useState<ScreenShareSession | null>(null);
+  const realtimeDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const ownRoom = useMemo(
     () => myRooms.find((r) => r.isHost) ?? null,
@@ -87,52 +108,111 @@ export function ScreenShareHubScreen() {
   );
 
   const openSession = (sessionId: string) => {
-    router.replace(screenShareSessionPath(sessionId) as Href);
+    // replace değil push — nested/root stack thrash beforeRemove ile odadan atıyordu
+    router.push(screenShareSessionPath(sessionId) as Href);
+  };
+
+  /** Açık listeden tıklama: şifreliyse önce sheet, doğruysa hemen gir. */
+  const openPublicRoom = (room: ScreenShareSession) => {
+    if (room.hasPassword) {
+      setJoinError(null);
+      setPendingJoinCode(room.joinCode);
+      setJoinPasswordOpen(true);
+      return;
+    }
+    openSession(room.id);
   };
 
   const loadRooms = useCallback(async (opts?: { soft?: boolean }) => {
     if (!opts?.soft && !readHubRoomsCache()) setListLoading(true);
 
-    // Önce açık odalar — hub’ın ana listesi; my/visited paralel ama boyama kademeli.
-    const pubPromise = listPublicScreenShareSessions(24)
-      .then((pub) => {
-        setPublicRooms(pub);
-        return pub;
-      })
-      .catch(() => [] as ScreenShareSession[]);
+    const cached = readHubRoomsCache();
+    const settled = await Promise.allSettled([
+      listPublicScreenShareSessions(24),
+      listMyScreenShareSessions(),
+      listVisitedScreenShareSessions(12),
+    ]);
 
-    const minePromise = listMyScreenShareSessions()
-      .then((mine) => {
-        setMyRooms(mine);
-        return mine;
-      })
-      .catch(() => [] as ScreenShareSession[]);
+    let pub = cached?.publicRooms ?? [];
+    let mine = cached?.myRooms ?? [];
+    let visited = cached?.visitedRooms ?? [];
+    let anyOk = false;
 
-    const visitedPromise = listVisitedScreenShareSessions(12)
-      .then((visited) => {
-        setVisitedRooms(visited);
-        return visited;
-      })
-      .catch(() => [] as ScreenShareSession[]);
-
-    try {
-      const [pub, mine, visited] = await Promise.all([pubPromise, minePromise, visitedPromise]);
-      writeHubRoomsCache({ myRooms: mine, publicRooms: pub, visitedRooms: visited });
-    } catch {
-      // hub hâlâ create/join ile çalışır
-    } finally {
-      setListLoading(false);
+    if (settled[0].status === 'fulfilled') {
+      pub = settled[0].value;
+      setPublicRooms(pub);
+      anyOk = true;
     }
+    if (settled[1].status === 'fulfilled') {
+      mine = settled[1].value;
+      setMyRooms(mine);
+      anyOk = true;
+    }
+    if (settled[2].status === 'fulfilled') {
+      visited = settled[2].value;
+      setVisitedRooms(visited);
+      anyOk = true;
+    }
+
+    // Başarısız RPC boş listeyi cache’e yazmasın — yeni pencereler kaybolmasın.
+    if (anyOk) {
+      writeHubRoomsCache({ myRooms: mine, publicRooms: pub, visitedRooms: visited });
+    }
+    setListLoading(false);
   }, []);
 
   useFocusEffect(
     useCallback(() => {
-      // Taze cache varsa ağ yok — pencereler anında boyanır (fatura şişmez).
-      if (isHubRoomsCacheFresh()) {
+      // Her focus: cache’ten boya, sonra ağdan soft-refresh.
+      const cached = readHubRoomsCache();
+      if (cached) {
+        setMyRooms(cached.myRooms);
+        setPublicRooms(cached.publicRooms);
+        setVisitedRooms(cached.visitedRooms);
         setListLoading(false);
-        return;
       }
-      void loadRooms({ soft: Boolean(readHubRoomsCache()) });
+      void loadRooms({ soft: Boolean(cached) });
+
+      // Hub’da kalınca yeni açılan pencereler görünsün.
+      const poll = setInterval(() => void loadRooms({ soft: true }), HUB_POLL_MS);
+
+      const scheduleRealtimeReload = () => {
+        if (realtimeDebounceRef.current) clearTimeout(realtimeDebounceRef.current);
+        realtimeDebounceRef.current = setTimeout(() => {
+          realtimeDebounceRef.current = null;
+          void loadRooms({ soft: true });
+        }, HUB_REALTIME_DEBOUNCE_MS);
+      };
+
+      let unsubRealtime: (() => Promise<void>) | null = null;
+      let cancelled = false;
+      void subscribeHubRoomsRealtime(scheduleRealtimeReload)
+        .then((unsub) => {
+          if (cancelled) {
+            void unsub();
+            return;
+          }
+          unsubRealtime = unsub;
+        })
+        .catch(() => {
+          // Realtime yoksa poll yeterli
+        });
+
+      const onAppState = (state: string) => {
+        if (state === 'active') void loadRooms({ soft: true });
+      };
+      const appSub = AppState.addEventListener('change', onAppState);
+
+      return () => {
+        cancelled = true;
+        clearInterval(poll);
+        if (realtimeDebounceRef.current) {
+          clearTimeout(realtimeDebounceRef.current);
+          realtimeDebounceRef.current = null;
+        }
+        appSub.remove();
+        void unsubRealtime?.();
+      };
     }, [loadRooms]),
   );
 
@@ -165,7 +245,11 @@ export function ScreenShareHubScreen() {
         input.password,
         coverUrl,
         replaceExisting,
+        input.isHidden,
       );
+      upsertHubMyRoom(session);
+      setMyRooms((prev) => [session, ...prev.filter((r) => r.id !== session.id)]);
+      setPublicRooms((prev) => prev.filter((r) => r.id !== session.id));
       setCreateOpen(false);
       setReplaceConfirmOpen(false);
       setPendingCreate(null);
@@ -198,6 +282,8 @@ export function ScreenShareHubScreen() {
     setJoinError(null);
     try {
       const session = await joinScreenShareSession(joinCode, password);
+      upsertHubMyRoom(session);
+      setMyRooms((prev) => [session, ...prev.filter((r) => r.id !== session.id)]);
       setJoinPasswordOpen(false);
       setJoinCodeOpen(false);
       openSession(session.id);
@@ -250,6 +336,7 @@ export function ScreenShareHubScreen() {
             setBusy(room.id);
             try {
               await deleteScreenShareSession(room.id);
+              invalidateHubRoomsCache();
               setMyRooms((prev) => prev.filter((r) => r.id !== room.id));
               setPublicRooms((prev) => prev.filter((r) => r.id !== room.id));
               setVisitedRooms((prev) => prev.filter((r) => r.id !== room.id));
@@ -324,17 +411,35 @@ export function ScreenShareHubScreen() {
         >
           <View style={styles.topBar}>
             <ScreenBackButton />
-            <Pressable
-              onPress={() => {
-                setJoinError(null);
-                setJoinCodeOpen(true);
-              }}
-              style={({ pressed }) => [styles.joinTopBtn, pressed && { opacity: 0.85 }]}
-              accessibilityLabel="Kod ile pencereye gir"
-            >
-              <Ionicons name="keypad-outline" size={16} color={SCREEN_SHARE_ACCENT} />
-              <Text style={styles.joinTopBtnText}>Kod ile gir</Text>
-            </Pressable>
+            <View style={styles.topActions}>
+              <Pressable
+                onPress={() => {
+                  setJoinError(null);
+                  setJoinCodeOpen(true);
+                }}
+                style={({ pressed }) => [styles.topIconBtn, pressed && { opacity: 0.85 }]}
+                accessibilityLabel="Kod ile pencereye gir"
+              >
+                <Ionicons name="keypad-outline" size={18} color={SCREEN_SHARE_ACCENT} />
+              </Pressable>
+              <Pressable
+                onPress={() => setCreateOpen(true)}
+                disabled={busy != null}
+                style={({ pressed }) => [
+                  styles.topCreateBtn,
+                  { opacity: pressed || busy === 'create' ? 0.88 : 1 },
+                ]}
+                accessibilityLabel={
+                  ownRoom ? 'Yeni pencere aç (mevcut kapanır)' : 'Yeni pencere aç'
+                }
+              >
+                {busy === 'create' ? (
+                  <ActivityIndicator color="#04110E" size="small" />
+                ) : (
+                  <Ionicons name="add" size={22} color="#04110E" />
+                )}
+              </Pressable>
+            </View>
           </View>
 
           <View style={styles.hero}>
@@ -344,7 +449,7 @@ export function ScreenShareHubScreen() {
             </View>
             <Text style={styles.title}>Açık pencereler</Text>
             <Text style={styles.subtitle}>
-              Şifresiz odalar herkese görünür. Senin odan üstte sabit kalır.
+              Canlı odalar burada. Şifreli olanlarda kilit görünür; tıklayınca şifre istenir.
             </Text>
           </View>
 
@@ -368,33 +473,6 @@ export function ScreenShareHubScreen() {
               />
             </View>
           ) : null}
-
-          <Pressable
-            onPress={() => setCreateOpen(true)}
-            disabled={busy != null}
-            style={({ pressed }) => [
-              styles.primaryCta,
-              { opacity: pressed || busy === 'create' ? 0.88 : 1 },
-            ]}
-          >
-            <LinearGradient
-              colors={[SCREEN_SHARE_ACCENT, '#5B8CFF']}
-              start={{ x: 0, y: 0.5 }}
-              end={{ x: 1, y: 0.5 }}
-              style={styles.primaryGradient}
-            >
-              {busy === 'create' ? (
-                <ActivityIndicator color="#04110E" />
-              ) : (
-                <>
-                  <Ionicons name="add" size={22} color="#04110E" />
-                  <Text style={styles.primaryCtaText}>
-                    {ownRoom ? 'Yeni pencere aç (mevcut kapanır)' : 'Yeni pencere aç'}
-                  </Text>
-                </>
-              )}
-            </LinearGradient>
-          </Pressable>
 
           <ScreenShareVisitedStrip
             rooms={visitedRooms}
@@ -432,8 +510,8 @@ export function ScreenShareHubScreen() {
                   <ScreenShareRoomWindow
                     key={room.id}
                     room={room}
-                    busy={busy === room.id}
-                    onOpen={() => openSession(room.id)}
+                    busy={busy === room.id || (busy === 'join' && pendingJoinCode === room.joinCode)}
+                    onOpen={() => openPublicRoom(room)}
                     onSafety={() => setSafetyRoom(room)}
                   />
                 ))}
@@ -492,12 +570,15 @@ export function ScreenShareHubScreen() {
       <ScreenSharePasswordSheet
         visible={joinPasswordOpen}
         title="Oda şifresi gerekli"
-        subtitle="Şifreyi biliyorsan gir. Bilmiyorsan host’tan davet iste."
+        subtitle="Şifreyi yaz; doğruysa hemen odaya girersin. Bilmiyorsan host’tan davet iste."
         confirmLabel="Giriş yap"
         busy={busy === 'join'}
         inviteBusy={busy === 'invite'}
         onRequestInvite={() => void onRequestInvite(pendingJoinCode)}
-        onClose={() => setJoinPasswordOpen(false)}
+        onClose={() => {
+          setJoinPasswordOpen(false);
+          setJoinError(null);
+        }}
         onSubmit={(password) => void tryJoin(pendingJoinCode, password)}
       />
 
@@ -550,6 +631,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: spacing.sm,
+  },
+  topActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  topIconBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,194,168,0.12)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(0,194,168,0.4)',
+  },
+  topCreateBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: SCREEN_SHARE_ACCENT,
   },
   joinTopBtn: {
     flexDirection: 'row',

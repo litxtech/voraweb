@@ -124,7 +124,7 @@ export function ScreenSharePresence({ sessionId, overlay = false, onAvatarPress 
   );
 }
 
-const AVATAR = 44;
+const AVATAR = 28;
 
 const styles = StyleSheet.create({
   wrap: {
@@ -134,27 +134,27 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     right: 0,
-    bottom: 12,
-    paddingHorizontal: spacing.sm,
+    bottom: 6,
+    paddingHorizontal: spacing.xs,
     zIndex: 4,
   },
   row: {
-    gap: spacing.md,
-    paddingHorizontal: spacing.sm,
+    gap: 8,
+    paddingHorizontal: spacing.xs,
     alignItems: 'center',
   },
   item: {
     alignItems: 'center',
-    gap: 4,
-    width: 64,
+    gap: 2,
+    width: 44,
   },
   ring: {
-    width: AVATAR + 6,
-    height: AVATAR + 6,
-    borderRadius: (AVATAR + 6) / 2,
+    width: AVATAR + 4,
+    height: AVATAR + 4,
+    borderRadius: (AVATAR + 4) / 2,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(0,0,0,0.35)',
+    backgroundColor: 'rgba(0,0,0,0.45)',
   },
   avatar: {
     width: AVATAR,
@@ -169,26 +169,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  initial: { color: '#fff', fontWeight: '800', fontSize: 16 },
+  initial: { color: '#fff', fontWeight: '800', fontSize: 11 },
   micDot: {
     position: 'absolute',
-    right: 0,
-    bottom: 0,
-    width: 12,
-    height: 12,
-    borderRadius: 6,
+    right: -1,
+    bottom: -1,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
     backgroundColor: SCREEN_SHARE_ACCENT,
-    borderWidth: 2,
+    borderWidth: 1.5,
     borderColor: '#05070A',
   },
   name: {
     color: '#E8EEF5',
-    fontSize: 10,
+    fontSize: 8,
     fontWeight: '700',
     textShadowColor: 'rgba(0,0,0,0.8)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 2,
-    maxWidth: 64,
+    maxWidth: 44,
     textAlign: 'center',
   },
 });
