@@ -5,7 +5,13 @@ import { ssLog } from '@/features/screen-share/services/screenShareDebugLog';
 const ROOM_OPTIONS = {
   adaptiveStream: false,
   dynacast: false,
+  // Unpublish sırasında track’i hemen stop etme — disconnect yarışında
+  // “RTCRtpSender not found” / signal stream ERROR azaltır.
   stopLocalTrackOnUnpublish: false,
+  // RN getSettings boş dönse bile publish tarafı bu çözünürlüğü kullanır.
+  videoCaptureDefaults: {
+    resolution: { width: 1280, height: 720, frameRate: 18 },
+  },
 } as const;
 
 /** React unmount’tan bağımsız — PiP’te tek bağlantı. */
@@ -137,11 +143,9 @@ export async function disposeScreenShareLiveKitRoom(): Promise<void> {
   connectInflight = null;
   if (!current) return;
   try {
-    const local = current.localParticipant;
-    await local.setMicrophoneEnabled(false).catch(() => undefined);
-    await local.setScreenShareEnabled(false).catch(() => undefined);
+    // Disconnect stops local tracks; avoids unpublish/disconnect race on RN WebSocket.
+    await current.disconnect(true).catch(() => undefined);
   } finally {
-    await current.disconnect().catch(() => undefined);
     ssLog('lk.dispose.done', { generation });
   }
 }
