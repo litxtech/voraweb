@@ -14,7 +14,7 @@ export default function CommunityRulesPage() {
     <article className="block">
       <div className="wrap prose">
         <h1>Topluluk kuralları</h1>
-        <p>Vora 18 yaş ve üzeri bir topluluktur. Date ve İzdivaç da bu yaş sınırının içindedir.</p>
+        <p>Vora 18 yaş ve üzeri bir topluluktur. Date ve Tanışma da bu yaş sınırının içindedir.</p>
         <ul>
           <li>Taciz, tehdit, nefret söylemi ve şiddet içeriği kaldırılır.</li>
           <li>Spam, sahte hesap ve dolandırıcılık bildirilir.</li>

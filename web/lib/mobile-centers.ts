@@ -28,7 +28,7 @@ export const MOBILE_CENTERS: CenterSpec[] = [
   { slug: 'hizmetler', title: 'Vora Hizmetler', subtitle: 'Usta keşfet, talep oluştur', group: 'Ekonomi & İş', accent: '#0EA5E9', table: 'vora_service_providers', columns: 'id, display_name, profession, city', titleKey: 'display_name', detailKey: 'profession' },
   { slug: 'ihtiyac', title: 'İhtiyaç Ağı', subtitle: 'İhtiyaç paylaş, yardımlaş', group: 'Sosyal', accent: '#7C4DFF', table: 'vora_needs', columns: 'id, title, description, city', titleKey: 'title', detailKey: 'city' },
   { slug: 'date', title: 'Date', subtitle: 'Plan paylaş, birlikte çık', group: 'Sosyal', accent: '#FF6B35', table: 'date_outings', columns: 'id, title, destination, activity', titleKey: 'title', detailKey: 'destination' },
-  { slug: 'izdivac', title: 'İzdivaç', subtitle: 'Tanışma ve arkadaşlık', group: 'Sosyal', accent: '#E91E63', table: 'izdivac_profiles', columns: 'id, display_name, city, bio', titleKey: 'display_name', detailKey: 'city' },
+  { slug: 'izdivac', title: 'Tanışma', subtitle: 'Güvenli arkadaşlık ve sohbet', group: 'Sosyal', accent: '#E91E63', table: 'izdivac_profiles', columns: 'id, display_name, city, bio', titleKey: 'display_name', detailKey: 'city' },
 ];
 
 export const CENTER_GROUPS: CenterGroup[] = ['Topluluk', 'Harita & Konum', 'Ekonomi & İş', 'Medya', 'Sosyal'];

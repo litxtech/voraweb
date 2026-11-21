@@ -96,7 +96,7 @@ export function IzdivacConversationInbox() {
         <Ionicons name="search-outline" size={15} color={colors.textMuted} />
         <TextInput
           style={[styles.search, { color: colors.text }]}
-          placeholder="İzdivaç sohbetlerinde ara…"
+          placeholder="Tanışma sohbetlerinde ara…"
           placeholderTextColor={colors.textMuted}
           value={query}
           onChangeText={setQuery}
@@ -123,7 +123,7 @@ export function IzdivacConversationInbox() {
             <View style={[styles.empty, { borderColor: colors.border }]}>
               <Ionicons name="chatbubble-ellipses-outline" size={28} color={colors.textMuted} />
               <Text secondary variant="caption" style={styles.emptyText}>
-                İzdivaç sohbetiniz yok. Üyelerden mesaj başlatın veya bir görüşme alanına katılın.
+                Tanışma sohbetiniz yok. Üyelerden mesaj başlatın veya bir görüşme alanına katılın.
               </Text>
             </View>
           )

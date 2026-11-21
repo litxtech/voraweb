@@ -56,7 +56,7 @@ export type PublicProfile = {
   isPioneer: boolean;
   isPlatformSupporter: boolean;
   isPremium: boolean;
-  /** İzdivaç topluluğu erişimi verilmiş — izdivaç tiki bu alana bağlıdır */
+  /** Tanışma topluluğu erişimi verilmiş — tanışma tiki bu alana bağlıdır */
   izdivacAccessGranted: boolean;
   /** Kullanıcının profilinde gizlemeyi seçtiği tik anahtarları */
   hiddenBadges: string[];

@@ -4,7 +4,7 @@ import type { IzdivacSpecialBadgeType } from '@/features/izdivac/types';
 
 /**
  * Bir kullanıcının uygulama genelinde görünür özel tiklerini (jigolo, tilki,
- * finansman) getirir. Bu tikler normal tiktir; İzdivaç erişiminden bağımsızdır.
+ * finansman) getirir. Bu tikler normal tiktir; Tanışma erişiminden bağımsızdır.
  */
 export function useIzdivacAppBadges(userId: string | undefined | null): IzdivacSpecialBadgeType[] {
   const [badges, setBadges] = useState<IzdivacSpecialBadgeType[]>([]);

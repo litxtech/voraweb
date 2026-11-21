@@ -62,7 +62,7 @@ export function AdminIzdivacScreen() {
   if (guard.status === 'denied') return null;
 
   return (
-    <AdminShell title="İzdivaç Erişimi" requireAdmin scrollable={false}>
+    <AdminShell title="Tanışma Erişimi" requireAdmin scrollable={false}>
       <View style={styles.content}>
         <View style={[styles.searchBar, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <Ionicons name="search" size={16} color={colors.textMuted} />

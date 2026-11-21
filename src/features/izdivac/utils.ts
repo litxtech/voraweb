@@ -58,7 +58,7 @@ export function canJoinIzdivacLobby(profile: IzdivacProfileSlice): boolean {
 }
 
 export function izdivacLobbyBlockReason(profile: IzdivacProfileSlice): string | null {
-  if (!hasIzdivacGrant(profile)) return 'İzdivaç erişiminiz yok.';
+  if (!hasIzdivacGrant(profile)) return 'Tanışma erişiminiz yok.';
   if (profile!.gender !== 'female' && profile!.gender !== 'male') {
     return 'Lobiye girmek için profilinizde cinsiyet bilgisi tanımlı olmalıdır.';
   }
@@ -66,7 +66,7 @@ export function izdivacLobbyBlockReason(profile: IzdivacProfileSlice): string | 
     return 'Lobiye girmek için doğum tarihinizi profilinize ekleyin.';
   }
   if (!canJoinIzdivacLobby(profile)) {
-    return 'İzdivaç alanına yalnızca 18 yaş ve üzeri üyeler katılabilir.';
+    return 'Tanışma alanına yalnızca 18 yaş ve üzeri üyeler katılabilir.';
   }
   return null;
 }

@@ -20,7 +20,7 @@ export function hasDateGender(profile: DateProfileSlice): boolean {
   return profile?.gender === 'female' || profile?.gender === 'male';
 }
 
-/** Date erişimi: 18+, profil tamamlanmış, cinsiyet zorunlu. İzdivaç'tan bağımsız. */
+/** Date erişimi: 18+, profil tamamlanmış, cinsiyet zorunlu. Tanışma'dan bağımsız. */
 export function canAccessDate(profile: DateProfileSlice): boolean {
   if (!profile) return false;
   if (profile.account_status && profile.account_status !== 'active') return false;

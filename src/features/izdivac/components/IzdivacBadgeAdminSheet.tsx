@@ -75,7 +75,7 @@ export function IzdivacBadgeAdminSheet({ visible, userId, username, onClose }: P
         >
           <View style={styles.handle} />
           <Text variant="h3" style={styles.title}>
-            İzdivaç Tikleri
+            Tanışma Tikleri
           </Text>
           {username ? (
             <Text secondary variant="caption" style={styles.subtitle}>

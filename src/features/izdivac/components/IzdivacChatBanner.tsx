@@ -11,7 +11,7 @@ export function IzdivacChatBanner() {
       <View style={styles.row}>
         <Ionicons name="heart-half" size={14} color={IZDIVAC_ACCENT} />
         <Text variant="caption" style={styles.title}>
-          İzdivaç sohbeti
+          Tanışma sohbeti
         </Text>
         <Pressable
           onPress={() => router.push('/izdivac-center?tab=messages' as never)}
@@ -25,7 +25,7 @@ export function IzdivacChatBanner() {
         </Pressable>
       </View>
       <Text secondary variant="caption" style={styles.hint}>
-        Bu sohbet yalnızca İzdivaç üyeleri arasında. Tüm mesajlaşma özellikleri kullanılabilir.
+        Bu sohbet yalnızca Tanışma üyeleri arasında. Tüm mesajlaşma özellikleri kullanılabilir.
       </Text>
     </View>
   );

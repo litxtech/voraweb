@@ -36,7 +36,7 @@ export type FeedAuthor = {
   isPioneer?: boolean;
   /** Ödeme yapan platform destekçisi — yeşil destekçi tiki */
   isPlatformSupporter?: boolean;
-  /** İzdivaç özel tikleri (jigolo, tilki, finansman) — yalnızca app/both görünürlük */
+  /** Tanışma özel tikleri (jigolo, tilki, finansman) — yalnızca app/both görünürlük */
   izdivacBadges?: IzdivacSpecialBadgeType[];
   /** Kullanıcının profilinde gizlediği tik anahtarları (verified, premium, role vb.) */
   hiddenBadges?: string[];

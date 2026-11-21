@@ -635,7 +635,7 @@ export async function fetchUserPosts(
   const emptyState = { liked: new Set<string>(), saved: new Set<string>() };
   const baseItems = rows.map((row) => mapPostToFeedItem(row, emptyState));
 
-  // Profil ızgarası: tek yazar — izdivaç/işletme zenginleştirmesi gereksiz (ek round-trip).
+  // Profil ızgarası: tek yazar — tanışma/işletme zenginleştirmesi gereksiz (ek round-trip).
   const state = await fetchEngagementState(postIds, viewerId);
 
   return baseItems.map((item) => ({

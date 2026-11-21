@@ -65,7 +65,7 @@ export const LEGAL_DOCUMENTS = {
     sections: [
       {
         heading: 'Hizmet Tanımı',
-        body: 'Vora; 18 yaş ve üzeri kullanıcılara yönelik bir sosyal platformdur. Canlı haber ve içerik paylaşımı, mesajlaşma, harita tabanlı içerikler, iş ilanları, Date ve İzdivaç gibi yetişkin sosyal özellikler, işletme reklamları ve topluluk etkileşimi sunar. Hizmet LitxTech tarafından işletilir. Platform çocuklara veya 18 yaş altına yönelik değildir.',
+        body: 'Vora; 18 yaş ve üzeri kullanıcılara yönelik bir sosyal platformdur. Canlı haber ve içerik paylaşımı, mesajlaşma, harita tabanlı içerikler, iş ilanları, Date ve Tanışma gibi yetişkin sosyal özellikler, işletme reklamları ve topluluk etkileşimi sunar. Hizmet LitxTech tarafından işletilir. Platform çocuklara veya 18 yaş altına yönelik değildir.',
       },
       {
         heading: 'Yaş ve Kayıt Koşulları',
@@ -77,7 +77,7 @@ export const LEGAL_DOCUMENTS = {
       },
       {
         heading: 'İçerik Politikası',
-        body: 'Nefret söylemi, şiddet, taciz, dolandırıcılık, yanıltıcı haber, yasa dışı faaliyet teşviki, çocuklara yönelik zararlı içerik, pornografi ve spam yasaktır. Date ve İzdivaç yalnızca 18+ üyeler içindir. İhlal eden içerikler kaldırılabilir; tekrarlayan ihlallerde hesap kısıtlanabilir veya kalıcı olarak kapatılabilir.',
+        body: 'Nefret söylemi, şiddet, taciz, dolandırıcılık, yanıltıcı haber, yasa dışı faaliyet teşviki, çocuklara yönelik zararlı içerik, pornografi ve spam yasaktır. Date ve Tanışma yalnızca 18+ üyeler içindir. İhlal eden içerikler kaldırılabilir; tekrarlayan ihlallerde hesap kısıtlanabilir veya kalıcı olarak kapatılabilir.',
       },
       {
         heading: 'Hesap Güvenliği',
@@ -153,7 +153,7 @@ export const LEGAL_DOCUMENTS = {
       },
       {
         heading: 'Toplanan Veriler',
-        body: 'Kayıt ve profil bilgileri (ad, kullanıcı adı, e-posta, doğum tarihi, cinsiyet), profil fotoğrafı, konum verisi (izin verildiğinde), paylaşımlar, mesajlar, Date ve İzdivaç profilleri, reklam gösterim/tıklama kayıtları, cihaz ve oturum bilgileri, bildirim tercihleri ve kullanım istatistikleri toplanabilir.',
+        body: 'Kayıt ve profil bilgileri (ad, kullanıcı adı, e-posta, doğum tarihi, cinsiyet), profil fotoğrafı, konum verisi (izin verildiğinde), paylaşımlar, mesajlar, Date ve Tanışma profilleri, reklam gösterim/tıklama kayıtları, cihaz ve oturum bilgileri, bildirim tercihleri ve kullanım istatistikleri toplanabilir.',
       },
       {
         heading: 'Veri İşleme Amaçları',
@@ -196,8 +196,8 @@ export const LEGAL_DOCUMENTS = {
         body: 'Reklam Merkezi kampanyaları yaş (en az 18), bölge ve ilgi alanına göre gösterilebilir. Reklam verenler işletme tanıtımı yapar; üçüncü taraf reklam ağı (AdMob vb.) kullanılmaz. Reklam içerikleri moderasyona tabidir.',
       },
       {
-        heading: 'Date ve İzdivaç',
-        body: 'Date ve İzdivaç yalnızca 18 yaşını doldurmuş, profili tamamlanmış üyeler içindir. Bu özelliklerde cinsiyet, doğum tarihi ve kullanıcıların paylaştığı profil/etkinlik bilgileri eşleşme ve katılım için işlenir.',
+        heading: 'Date ve Tanışma',
+        body: 'Date ve Tanışma yalnızca 18 yaşını doldurmuş, profili tamamlanmış üyeler içindir. Bu özelliklerde cinsiyet, doğum tarihi ve kullanıcıların paylaştığı profil/etkinlik bilgileri eşleşme ve katılım için işlenir.',
       },
       {
         heading: 'Abonelik ve Ödeme Verileri',

@@ -106,7 +106,7 @@ export function IzdivacPostCard({ post, currentUserId, onUpdate, onDelete }: Pro
   );
 
   const confirmDelete = () => {
-    Alert.alert('Paylaşımı kaldır', 'Bu paylaşım İzdivaç duvarından silinecek.', [
+    Alert.alert('Paylaşımı kaldır', 'Bu paylaşım Tanışma duvarından silinecek.', [
       { text: 'Vazgeç', style: 'cancel' },
       {
         text: 'Kaldır',

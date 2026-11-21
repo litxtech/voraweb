@@ -91,6 +91,6 @@ export function getIzdivacNotificationActionLabel(
   if (kind === 'izdivac_post_comment' || kind === 'izdivac_post_join') return 'Duvara git';
   if (kind === 'izdivac_invite_received') return 'Mesajlara git';
   if (kind === 'izdivac_invite_accepted') return 'Sohbete git';
-  if (kind === 'izdivac_access_granted' || kind === 'legacy_center') return 'İzdivaç merkezine git';
+  if (kind === 'izdivac_access_granted' || kind === 'legacy_center') return 'Tanışma merkezine git';
   return 'Detayı aç';
 }

@@ -128,7 +128,7 @@ export async function enrichFeedAuthorsInItems<T extends { author: FeedAuthor }>
     ),
   ];
 
-  // İzdivaç özel tikleri tüm yazarlar için toplu çekilir (bireysel hesaplar dahil)
+  // Tanışma özel tikleri tüm yazarlar için toplu çekilir (bireysel hesaplar dahil)
   const personalAuthorIds = [
     ...new Set(
       items

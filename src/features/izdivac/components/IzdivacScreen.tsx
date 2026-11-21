@@ -46,11 +46,11 @@ export function IzdivacScreen() {
               <View style={styles.titleRow}>
                 <Ionicons name="heart-half" size={16} color={IZDIVAC_ACCENT} />
                 <Text variant="label" style={styles.title}>
-                  İzdivaç
+                  Tanışma
                 </Text>
               </View>
               <Text secondary variant="caption" style={styles.subtitle} numberOfLines={1}>
-                Özel tanışma alanı
+                Özel arkadaşlık alanı
               </Text>
             </View>
             <Pressable onPress={() => void lobby.refresh()} hitSlop={8} style={styles.refreshBtn}>

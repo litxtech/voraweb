@@ -132,7 +132,7 @@ export function IzdivacWallComposer({ onPosted }: Props) {
     if (durationMs > IZDIVAC_WALL_VIDEO_MAX_DURATION_SEC * 1000) {
       Alert.alert(
         'Video çok uzun',
-        `İzdivaç videoları en fazla ${Math.floor(IZDIVAC_WALL_VIDEO_MAX_DURATION_SEC / 60)} dakika olabilir.`,
+        `Tanışma videoları en fazla ${Math.floor(IZDIVAC_WALL_VIDEO_MAX_DURATION_SEC / 60)} dakika olabilir.`,
       );
       return;
     }
@@ -231,7 +231,7 @@ export function IzdivacWallComposer({ onPosted }: Props) {
       <IzdivacFormSheet
         visible={sheetOpen}
         title={isInvite ? 'Davet oluştur' : 'Duvara paylaş'}
-        subtitle="Yalnızca İzdivaç üyeleri görür."
+        subtitle="Yalnızca Tanışma üyeleri görür."
         onClose={closeSheet}
         footer={
           <IzdivacSheetPrimaryButton

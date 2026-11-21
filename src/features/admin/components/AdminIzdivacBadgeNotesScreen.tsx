@@ -99,7 +99,7 @@ export function AdminIzdivacBadgeNotesScreen() {
   if (guard.status === 'denied') return null;
 
   return (
-    <AdminShell title="İzdivaç Tik Notları" requireAdmin>
+    <AdminShell title="Tanışma Tik Notları" requireAdmin>
       <Text secondary variant="caption" style={styles.intro}>
         Tike tıklanınca açılan açıklama notunu buradan düzenleyin. "Varsayılana dön" özel notu siler ve
         uygulamadaki varsayılan metni geri getirir.

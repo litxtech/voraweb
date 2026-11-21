@@ -512,8 +512,8 @@ export function AdminUserDetailScreen() {
   const handleGrantIzdivac = () => {
     if (!id) return;
     Alert.alert(
-      'İzdivaç erişimi ver',
-      `@${user?.username} kullanıcısına İzdivaç merkezi erişimi verilsin mi?`,
+      'Tanışma erişimi ver',
+      `@${user?.username} kullanıcısına Tanışma merkezi erişimi verilsin mi?`,
       [
         { text: 'Vazgeç', style: 'cancel' },
         {
@@ -522,7 +522,7 @@ export function AdminUserDetailScreen() {
             const { error } = await grantIzdivacAccess(id);
             if (error) Alert.alert('Hata', error);
             else {
-              Alert.alert('Tamam', 'İzdivaç erişimi açıldı.');
+              Alert.alert('Tamam', 'Tanışma erişimi açıldı.');
               load(true);
             }
           },
@@ -534,8 +534,8 @@ export function AdminUserDetailScreen() {
   const handleRevokeIzdivac = () => {
     if (!id) return;
     Alert.alert(
-      'İzdivaç erişimini kaldır',
-      `@${user?.username} kullanıcısının İzdivaç erişimi kapatılsın mı?`,
+      'Tanışma erişimini kaldır',
+      `@${user?.username} kullanıcısının Tanışma erişimi kapatılsın mı?`,
       [
         { text: 'Vazgeç', style: 'cancel' },
         {
@@ -545,7 +545,7 @@ export function AdminUserDetailScreen() {
             const { error } = await revokeIzdivacAccess(id);
             if (error) Alert.alert('Hata', error);
             else {
-              Alert.alert('Tamam', 'İzdivaç erişimi kapatıldı.');
+              Alert.alert('Tamam', 'Tanışma erişimi kapatıldı.');
               load(true);
             }
           },
@@ -985,11 +985,11 @@ export function AdminUserDetailScreen() {
           </GlassCard>
 
           <GlassCard style={styles.card}>
-            <Text variant="label">İzdivaç</Text>
+            <Text variant="label">Tanışma</Text>
             <Text secondary variant="caption">
               {isIzdivacGranted
-                ? 'Kullanıcı İzdivaç merkezine girebilir. Merkezler sekmesinde buton görünür.'
-                : 'Kullanıcının İzdivaç merkezi erişimi yok.'}
+                ? 'Kullanıcı Tanışma merkezine girebilir. Merkezler sekmesinde buton görünür.'
+                : 'Kullanıcının Tanışma merkezi erişimi yok.'}
             </Text>
             <View style={styles.actions}>
               <AdminActionChip
@@ -1010,7 +1010,7 @@ export function AdminUserDetailScreen() {
               />
             </View>
             <Text secondary variant="caption" style={{ marginTop: spacing.xs }}>
-              Jigolo, Tilki ve Finansman tiklerini yönetin. Bu tikler normal tiktir; İzdivaç
+              Jigolo, Tilki ve Finansman tiklerini yönetin. Bu tikler normal tiktir; Tanışma
               erişiminden bağımsız olarak her zaman görünür.
             </Text>
             <View style={styles.actions}>

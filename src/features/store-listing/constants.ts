@@ -26,7 +26,7 @@ Ne yapabilirsin
 • Akış, reels ve hikâyelerle paylaş
 • Mesaj ve arama
 • Harita ve yerel topluluk
-• Date ve İzdivaç — yalnızca 18+ üyeler
+• Date ve Tanışma — yalnızca 18+ üyeler
 • İş, etkinlik ve bölgesel keşif
 
 Vora çocuklara veya 18 yaş altına yönelik değildir. Kayıt için 18 yaşını doldurmuş olmak gerekir.
@@ -47,7 +47,7 @@ export const PLAY_IARC_ANSWERS: { topic: string; answer: string }[] = [
   { topic: 'Kullanıcılar birbirine mesaj atabiliyor mu', answer: 'Evet — sohbet ve arama' },
   { topic: 'Konum paylaşımı', answer: 'Evet — isteğe bağlı, izinle' },
   { topic: 'Sınırsız internet / dış bağlantı', answer: 'Evet — profil ve reklam linkleri' },
-  { topic: 'Flört / tanışma / romantizm', answer: 'Evet — Date ve İzdivaç (yalnızca 18+)' },
+  { topic: 'Flört / tanışma / romantizm', answer: 'Evet — Date ve Tanışma (yalnızca 18+)' },
   { topic: 'Reklam var mı', answer: 'Evet — uygulama içi işletme reklamları' },
   { topic: 'Reklam olgunluğu', answer: 'Yetişkin kitle (18+); moderasyonlu işletme tanıtımı. Kumar/porno yok' },
   { topic: 'Cinsel içerik / çıplaklık (uygulama)', answer: 'Hayır — yasak. Date yetişkin sosyal alandır, pornografi yoktur' },
@@ -60,7 +60,7 @@ export const PLAY_IARC_ANSWERS: { topic: string; answer: string }[] = [
 
 export const PLAY_DATA_SAFETY_NOTES = [
   'Toplanır: e-posta, ad, kullanıcı adı, doğum tarihi, cinsiyet, kullanıcı kimliği, fotoğraflar, mesajlar, isteğe bağlı konum',
-  'Amaç: hesap, sosyal özellikler, Date/İzdivaç, reklam gösterimi, güvenlik',
+  'Amaç: hesap, sosyal özellikler, Date/Tanışma, reklam gösterimi, güvenlik',
   'Satılmaz. Üçüncü taraf reklam ağı yok',
   'Aktarımda şifreleme: evet (HTTPS)',
   'Kullanıcı silebilir: evet (hesap silme + support@litxtech.com)',
