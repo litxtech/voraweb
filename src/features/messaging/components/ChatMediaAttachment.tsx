@@ -1,5 +1,5 @@
-import { StyleSheet } from 'react-native';
-import { FeedMediaPreview } from '@/components/media/FeedMediaPreview';
+import { Image, Pressable, StyleSheet, View } from 'react-native';
+import { OptimizedImage } from '@/components/media/OptimizedImage';
 import { radius } from '@/constants/theme';
 import { isVideoUrl } from '@/lib/media/isVideoUrl';
 import { CHAT_MEDIA_ASPECT, CHAT_MEDIA_MAX_HEIGHT, CHAT_MEDIA_WIDTH } from '../constants';
@@ -11,24 +11,51 @@ type ChatMediaAttachmentProps = {
   onDoublePress?: () => void;
 };
 
-/** Sohbet görsel/video — feed gibi kenarsız önizleme, tıklayınca temiz tam ekran. */
+function isLocalUri(uri: string) {
+  return uri.startsWith('file://') || uri.startsWith('content://');
+}
+
+/** Sohbet görsel — önizleme + uzun basınca / dokununca tam ekran */
 export function ChatMediaAttachment({ uri, onDoublePress }: ChatMediaAttachmentProps) {
   const { openMedia } = useChatMediaViewer();
-  const isVideo = isVideoUrl(uri);
+  const trimmed = uri?.trim() ?? '';
+  const isVideo = isVideoUrl(trimmed);
+
+  const open = () => {
+    if (!trimmed) return;
+    openMedia(trimmed, { isVideo });
+  };
 
   const handlePress = useDoubleTap({
-    onSingleTap: () => openMedia(uri, { isVideo }),
+    onSingleTap: open,
     onDoubleTap: onDoublePress,
   });
 
+  if (!trimmed) {
+    return <View style={[styles.media, styles.empty]} />;
+  }
+
   return (
-    <FeedMediaPreview
-      url={uri}
-      style={styles.media}
-      resizeMode="cover"
-      showPlayIcon={isVideo}
+    <Pressable
       onPress={handlePress}
-    />
+      onLongPress={open}
+      delayLongPress={260}
+      style={({ pressed }) => [styles.media, pressed && styles.pressed]}
+      accessibilityRole="button"
+      accessibilityLabel="Medyayı tam ekran aç"
+    >
+      {isLocalUri(trimmed) ? (
+        <Image source={{ uri: trimmed }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+      ) : (
+        <OptimizedImage
+          uri={trimmed}
+          style={StyleSheet.absoluteFill}
+          contentFit="cover"
+          tier="feed"
+          recyclingKey={trimmed}
+        />
+      )}
+    </Pressable>
   );
 }
 
@@ -41,5 +68,13 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     overflow: 'hidden',
     marginBottom: 2,
+    backgroundColor: '#0A0E14',
+  },
+  empty: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pressed: {
+    opacity: 0.92,
   },
 });

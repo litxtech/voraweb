@@ -83,6 +83,8 @@ type ChatComposerProps = {
   conversationId?: string | null;
   initialDraft?: string;
   onDraftChange?: (text: string) => void;
+  /** Wallpaper açıkken input şeridi şeffaf — arka plan alta kadar görünür */
+  chromeTransparent?: boolean;
 };
 
 export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(function ChatComposer(
@@ -117,6 +119,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
     conversationId,
     initialDraft = '',
     onDraftChange,
+    chromeTransparent = false,
   },
   ref,
 ) {
@@ -412,36 +415,18 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
                 <Ionicons name="happy-outline" size={21} color={colors.primary} />
               </Pressable>
             ) : null}
+            {!showSendButton && onToggleRecording && !pendingVoice && showVoiceBtn ? (
+              <Pressable
+                hitSlop={8}
+                {...getAndroidInstantPressableProps()}
+                {...keyboardPersistPress(onToggleRecording)}
+                style={({ pressed }) => [styles.inlineVoiceBtn, { opacity: pressed ? 0.55 : 1 }]}
+                accessibilityLabel="Sesli mesaj kaydet"
+              >
+                <Ionicons name="mic-outline" size={22} color={colors.textSecondary} />
+              </Pressable>
+            ) : null}
           </View>
-
-          {showSendButton ? (
-            <Pressable
-              hitSlop={6}
-              {...getAndroidInstantPressableProps()}
-              {...keyboardPersistPress(handleSendPress)}
-              style={({ pressed }) => [
-                styles.sendBtn,
-                { backgroundColor: colors.primary, opacity: pressed ? 0.88 : 1 },
-              ]}
-              accessibilityLabel={attachmentPreview ? 'Fotoğrafı gönder' : 'Mesajı gönder'}
-            >
-              <Ionicons
-                name={editingMessage ? 'checkmark' : 'arrow-up'}
-                size={22}
-                color="#fff"
-              />
-            </Pressable>
-          ) : onToggleRecording && !pendingVoice && showVoiceBtn ? (
-            <Pressable
-              hitSlop={8}
-              {...getAndroidInstantPressableProps()}
-              {...keyboardPersistPress(onToggleRecording)}
-              style={({ pressed }) => [styles.trailingIconBtn, { opacity: pressed ? 0.55 : 1 }]}
-              accessibilityLabel="Sesli mesaj kaydet"
-            >
-              <Ionicons name="mic-outline" size={24} color={colors.textSecondary} />
-            </Pressable>
-          ) : null}
 
           {onQuickCapture && showCameraBtn ? (
             <Pressable
@@ -460,6 +445,25 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
               />
             </Pressable>
           ) : null}
+
+          {showSendButton ? (
+            <Pressable
+              hitSlop={6}
+              {...getAndroidInstantPressableProps()}
+              {...keyboardPersistPress(handleSendPress)}
+              style={({ pressed }) => [
+                styles.sendBtn,
+                { backgroundColor: colors.primary, opacity: pressed ? 0.88 : 1 },
+              ]}
+              accessibilityLabel={attachmentPreview ? 'Fotoğrafı gönder' : 'Mesajı gönder'}
+            >
+              <Ionicons
+                name={editingMessage ? 'checkmark' : 'arrow-up'}
+                size={22}
+                color="#fff"
+              />
+            </Pressable>
+          ) : null}
         </View>
       )}
     </>
@@ -468,20 +472,23 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
   const containerStyle = [
     styles.container,
     {
-      borderTopColor: chat.composerBorder,
-      backgroundColor:
-        Platform.OS === 'ios' ? chat.composerBgSolid : chat.composerBg,
+      borderTopColor: chromeTransparent ? 'transparent' : chat.composerBorder,
+      backgroundColor: chromeTransparent
+        ? 'transparent'
+        : Platform.OS === 'ios'
+          ? chat.composerBgSolid
+          : chat.composerBg,
     },
   ];
 
-  if (Platform.OS === 'ios') {
+  if (Platform.OS === 'ios' && !chromeTransparent) {
     return (
       <View onLayout={handleLayout} style={containerStyle}>
         <BlurView
           pointerEvents="none"
           intensity={55}
           tint={isDark ? 'dark' : 'light'}
-          style={StyleSheet.absoluteFillObject}
+          style={StyleSheet.absoluteFill}
         />
         {inner}
       </View>
@@ -618,6 +625,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: 4,
   },
+  inlineVoiceBtn: {
+    width: 34,
+    height: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 4,
+  },
   sendBtn: {
     width: 42,
     height: 42,
@@ -656,7 +670,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   attachmentVideoBadge: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(0,0,0,0.28)',

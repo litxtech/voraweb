@@ -57,11 +57,11 @@ export function ChatVideoAttachment({
   onDoublePress,
 }: ChatVideoAttachmentProps) {
   const { openMedia } = useChatMediaViewer();
-  const previewUri = localMediaUri ?? uri;
+  const previewUri = (localMediaUri && localMediaUri.trim()) || uri;
   const playbackUri = resolvePlaybackUri(uri, localMediaUri);
   const isProcessing = isProcessingVideoUrl(uri);
   const muxThumb = getMuxThumbnail(uri);
-  // Uzak videoda getThumbnailAsync Android açılışını kilitler — yalnızca yerel + Mux poster.
+  // Yerel dosyadan kare; uzak için Mux poster
   const localThumbSource =
     !isProcessing && !muxThumb && isLocalMediaUri(previewUri) ? previewUri : null;
   const generatedThumb = useLocalVideoThumbnail(localThumbSource);
@@ -80,6 +80,14 @@ export function ChatVideoAttachment({
     onDoubleTap: onDoublePress,
   });
 
+  const handleLongPress = () => {
+    if (canOpen) {
+      openVideo();
+      return;
+    }
+    onLongPress?.();
+  };
+
   if (isProcessing) {
     return (
       <View style={[styles.media, styles.processing]}>
@@ -94,12 +102,13 @@ export function ChatVideoAttachment({
   return (
     <Pressable
       onPress={handlePress}
-      onLongPress={onLongPress}
-      delayLongPress={280}
-      disabled={!canOpen}
-      style={({ pressed }) => [styles.media, pressed && canOpen && styles.pressed]}
+      onLongPress={handleLongPress}
+      delayLongPress={260}
+      style={({ pressed }) => [styles.media, pressed && styles.pressed]}
       accessibilityRole="button"
-      accessibilityLabel={showUploadOverlay ? "Video Vora'ya yükleniyor" : 'Videoyu oynat'}
+      accessibilityLabel={
+        showUploadOverlay ? "Video Vora'ya yükleniyor" : 'Videoyu tam ekran aç'
+      }
     >
       {thumbnailUrl ? (
         <Image
@@ -111,7 +120,9 @@ export function ChatVideoAttachment({
       ) : awaitingLocalThumb ? (
         <ChatVideoPreviewFrame />
       ) : (
-        <View style={styles.fallbackBg} pointerEvents="none" />
+        <View style={styles.fallbackBg} pointerEvents="none">
+          <Ionicons name="videocam" size={36} color="rgba(255,255,255,0.35)" />
+        </View>
       )}
 
       <LinearGradient
@@ -179,6 +190,8 @@ const styles = StyleSheet.create({
   fallbackBg: {
     ...StyleSheet.absoluteFill,
     backgroundColor: '#121820',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   bottomGradient: {
     position: 'absolute',

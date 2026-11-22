@@ -27,6 +27,7 @@ import { filterBlockedUsers, searchMessagingUsers } from '../services/userSearch
 import type { MessagingParticipant } from '../types';
 import { displayParticipantName } from '../utils';
 import { useChatTheme } from '../hooks/useChatTheme';
+import { getListPerfProps } from '@/lib/device/androidPerfProfile';
 
 export function NewMessageScreen() {
   const { user } = useAuth();
@@ -214,6 +215,7 @@ export function NewMessageScreen() {
           <ActivityIndicator color={colors.primary} style={styles.loader} />
         ) : (
           <FlatList
+            {...getListPerfProps()}
             data={suggestions}
             keyExtractor={(item) => item.id}
             contentContainerStyle={styles.list}

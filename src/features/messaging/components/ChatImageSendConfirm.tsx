@@ -14,7 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Text } from '@/components/ui/Text';
 import { radius, spacing } from '@/constants/theme';
-import { resolveModalAnimationType } from '@/lib/device/androidPerfProfile';
+import { resolveModalAnimationType, shouldSkipUiBlur } from '@/lib/device/androidPerfProfile';
 import { useTheme } from '@/providers/ThemeProvider';
 import { CHAT_EPHEMERAL_DEFAULT_DURATION_SEC } from '../constants';
 import { ChatVideoPlayer } from './ChatVideoPlayer';
@@ -118,56 +118,76 @@ export function ChatImageSendConfirm({
         </View>
 
         <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.md }]}>
-          <BlurView intensity={isDark ? 40 : 55} tint={isDark ? 'dark' : 'light'} style={styles.footerBlur}>
-            <View style={styles.modeRow}>
-              <Pressable
-                onPress={() => onEphemeralChange(true)}
-                style={[styles.modeChip, ephemeral && { backgroundColor: colors.primary }]}
-              >
-                <Ionicons name="timer-outline" size={16} color="#fff" />
-                <Text variant="caption" style={styles.modeChipText}>
-                  Süreli ({CHAT_EPHEMERAL_DEFAULT_DURATION_SEC}s)
-                </Text>
-              </Pressable>
-              <Pressable
-                onPress={() => onEphemeralChange(false)}
-                style={[styles.modeChip, !ephemeral && { backgroundColor: colors.primary }]}
-              >
-                <Ionicons name="infinite-outline" size={16} color="#fff" />
-                <Text variant="caption" style={styles.modeChipText}>
-                  Süresiz
-                </Text>
-              </Pressable>
-            </View>
-
-            <View style={styles.actionRow}>
-              <Pressable
-                onPress={onCancel}
-                disabled={sending}
-                style={({ pressed }) => [
-                  styles.cancelBtn,
-                  { borderColor: 'rgba(255,255,255,0.35)', opacity: pressed ? 0.8 : 1 },
-                ]}
-              >
-                <Text variant="body" style={styles.cancelBtnText}>
-                  İptal
-                </Text>
-              </Pressable>
-              <Pressable
-                onPress={onSend}
-                disabled={sending}
-                style={({ pressed }) => [
-                  styles.sendBtn,
-                  { backgroundColor: colors.primary, opacity: pressed || sending ? 0.88 : 1 },
-                ]}
-              >
-                <Ionicons name="send" size={18} color="#fff" />
-                <Text variant="body" style={styles.sendBtnText}>
-                  {sending ? 'Gönderiliyor…' : 'Gönder'}
-                </Text>
-              </Pressable>
-            </View>
-          </BlurView>
+          {(() => {
+            const footerBody = (
+              <>
+                <View style={styles.modeRow}>
+                  <Pressable
+                    onPress={() => onEphemeralChange(true)}
+                    style={[styles.modeChip, ephemeral && { backgroundColor: colors.primary }]}
+                  >
+                    <Ionicons name="timer-outline" size={16} color="#fff" />
+                    <Text variant="caption" style={styles.modeChipText}>
+                      Süreli ({CHAT_EPHEMERAL_DEFAULT_DURATION_SEC}s)
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => onEphemeralChange(false)}
+                    style={[styles.modeChip, !ephemeral && { backgroundColor: colors.primary }]}
+                  >
+                    <Ionicons name="infinite-outline" size={16} color="#fff" />
+                    <Text variant="caption" style={styles.modeChipText}>
+                      Süresiz
+                    </Text>
+                  </Pressable>
+                </View>
+                <View style={styles.actionRow}>
+                  <Pressable
+                    onPress={onCancel}
+                    disabled={sending}
+                    style={({ pressed }) => [
+                      styles.cancelBtn,
+                      { borderColor: 'rgba(255,255,255,0.35)', opacity: pressed ? 0.8 : 1 },
+                    ]}
+                  >
+                    <Text variant="body" style={styles.cancelBtnText}>
+                      İptal
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={onSend}
+                    disabled={sending}
+                    style={({ pressed }) => [
+                      styles.sendBtn,
+                      { backgroundColor: colors.primary, opacity: pressed || sending ? 0.88 : 1 },
+                    ]}
+                  >
+                    <Ionicons name="send" size={18} color="#fff" />
+                    <Text variant="body" style={styles.sendBtnText}>
+                      {sending ? 'Gönderiliyor…' : 'Gönder'}
+                    </Text>
+                  </Pressable>
+                </View>
+              </>
+            );
+            if (shouldSkipUiBlur()) {
+              return (
+                <View
+                  style={[
+                    styles.footerBlur,
+                    { backgroundColor: isDark ? 'rgba(12,16,22,0.94)' : 'rgba(20,24,32,0.9)' },
+                  ]}
+                >
+                  {footerBody}
+                </View>
+              );
+            }
+            return (
+              <BlurView intensity={isDark ? 40 : 55} tint={isDark ? 'dark' : 'light'} style={styles.footerBlur}>
+                {footerBody}
+              </BlurView>
+            );
+          })()}
         </View>
       </View>
     </Modal>
@@ -201,7 +221,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   previewStage: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -216,7 +236,7 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   videoPreviewWrap: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: '#000',
   },
   counterPill: {

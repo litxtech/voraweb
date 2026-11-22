@@ -13,24 +13,27 @@ import { useConversationList } from '../hooks/useConversationList';
 import { fetchConversationList } from '../services/conversationData';
 import { conversationTitle, formatConversationDraftPreview } from '../utils';
 import { InboxConversationRow } from './InboxConversationRow';
+import { CONVERSATION_AVATAR_SIZE } from './ConversationRow';
 import { useChatTheme } from '../hooks/useChatTheme';
 import { useMessageDrafts } from '../hooks/useMessageDrafts';
 import { useMessagingStore } from '../store/messagingStore';
-import { getAndroidFlatListPerfProps, shouldDeferHeavyFocusWork } from '@/lib/device/androidPerfProfile';
+import { getListPerfProps, shouldDeferHeavyFocusWork } from '@/lib/device/androidPerfProfile';
 import { deferBackgroundWork } from '@/lib/ui/deferUntilUiIdle';
 import { useFeatureVisible } from '@/features/feature-flags/hooks/useFeatureVisible';
 import { MESSAGING_FEATURE } from '@/features/messaging/featureFlags';
 
 function InboxListPlaceholder() {
   const { colors } = useTheme();
-  const chat = useChatTheme();
 
   return (
     <View style={styles.placeholderList}>
       {Array.from({ length: 8 }, (_, index) => (
         <View
           key={index}
-          style={[styles.placeholderRow, { backgroundColor: chat.rowBg, borderColor: chat.rowBorder }]}
+          style={[
+            styles.placeholderRow,
+            index > 0 ? { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border } : null,
+          ]}
         >
           <View style={[styles.placeholderAvatar, { backgroundColor: colors.surfaceElevated }]} />
           <View style={styles.placeholderCopy}>
@@ -147,6 +150,12 @@ export function ConversationInbox() {
 
   const keyExtractor = useCallback((item: (typeof conversations)[number]) => item.id, []);
 
+  /** Instagram tarzı ince ayırıcı — metin hizasından başlar. */
+  const renderSeparator = useCallback(
+    () => <View style={[styles.separator, { backgroundColor: colors.border }]} />,
+    [colors.border],
+  );
+
   const filtered = useMemo(() => {
     const inbox = conversations.filter(
       (c) => !(c.type === 'direct' && c.otherUser && restrictedIds.has(c.otherUser.id)),
@@ -211,7 +220,8 @@ export function ConversationInbox() {
 
       {showArchive ? (
         <Pressable
-          style={[styles.archiveToggle, { backgroundColor: chat.rowBg, borderColor: chat.rowBorder }]}
+          // Düz satır: liste kart görünümünden arındırıldı.
+          style={styles.archiveToggle}
           onPress={() => setShowArchived((v) => !v)}
         >
           <View style={[styles.archiveIcon, { backgroundColor: `${colors.primary}14` }]}>
@@ -241,11 +251,12 @@ export function ConversationInbox() {
         data={filtered}
         keyExtractor={keyExtractor}
         renderItem={renderItem}
+        ItemSeparatorComponent={renderSeparator}
         contentContainerStyle={styles.list}
         refreshing={false}
         onRefresh={pullRefresh}
         showsVerticalScrollIndicator={false}
-        {...getAndroidFlatListPerfProps()}
+        {...getListPerfProps()}
         ListEmptyComponent={
           ready ? (
             <View style={styles.emptyWrap}>
@@ -316,8 +327,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: radius.md,
     paddingHorizontal: spacing.md,
     paddingVertical: 8,
   },
@@ -346,8 +355,13 @@ const styles = StyleSheet.create({
     marginLeft: 'auto',
   },
   list: {
-    gap: 6,
+    gap: 0,
     paddingBottom: spacing.xxl,
+  },
+  separator: {
+    height: StyleSheet.hairlineWidth,
+    // Avatar + satır boşluğu kadar içeriden başlar (Instagram hizası).
+    marginLeft: spacing.md + CONVERSATION_AVATAR_SIZE + 12,
   },
   emptyWrap: {
     alignItems: 'center',
@@ -369,21 +383,20 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   placeholderList: {
-    gap: 6,
+    gap: 0,
   },
   placeholderRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
-    paddingVertical: 10,
+    gap: 12,
+    paddingVertical: 7,
     paddingHorizontal: spacing.md,
-    borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
+    minHeight: 68,
   },
   placeholderAvatar: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
+    width: 54,
+    height: 54,
+    borderRadius: 27,
   },
   placeholderCopy: {
     flex: 1,

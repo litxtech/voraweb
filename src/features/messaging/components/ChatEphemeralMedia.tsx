@@ -5,6 +5,7 @@ import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@/components/ui/Text';
 import { radius } from '@/constants/theme';
+import { shouldSkipUiBlur } from '@/lib/device/androidPerfProfile';
 import { CHAT_MEDIA_ASPECT, CHAT_MEDIA_MAX_HEIGHT, CHAT_MEDIA_WIDTH } from '../constants';
 import {
   getEphemeralRemainingSec,
@@ -100,17 +101,31 @@ export function ChatEphemeralMedia({
           <Image source={{ uri }} style={styles.media} contentFit="cover" />
         )}
         {blurred ? (
-          <BlurView intensity={55} tint="dark" style={StyleSheet.absoluteFill}>
-            <View style={styles.blurContent}>
-              <Ionicons name={isVideo ? 'videocam-outline' : 'timer-outline'} size={28} color="#fff" />
-              <Text variant="caption" style={styles.blurText}>
-                {isVideo ? 'Süreli video' : 'Süreli fotoğraf'}
-              </Text>
-              <Text variant="caption" style={styles.blurHint}>
-                Görmek için dokun
-              </Text>
+          shouldSkipUiBlur() ? (
+            <View style={[StyleSheet.absoluteFill, styles.blurFallback]}>
+              <View style={styles.blurContent}>
+                <Ionicons name={isVideo ? 'videocam-outline' : 'timer-outline'} size={28} color="#fff" />
+                <Text variant="caption" style={styles.blurText}>
+                  {isVideo ? 'Süreli video' : 'Süreli fotoğraf'}
+                </Text>
+                <Text variant="caption" style={styles.blurHint}>
+                  Görmek için dokun
+                </Text>
+              </View>
             </View>
-          </BlurView>
+          ) : (
+            <BlurView intensity={55} tint="dark" style={StyleSheet.absoluteFill}>
+              <View style={styles.blurContent}>
+                <Ionicons name={isVideo ? 'videocam-outline' : 'timer-outline'} size={28} color="#fff" />
+                <Text variant="caption" style={styles.blurText}>
+                  {isVideo ? 'Süreli video' : 'Süreli fotoğraf'}
+                </Text>
+                <Text variant="caption" style={styles.blurHint}>
+                  Görmek için dokun
+                </Text>
+              </View>
+            </BlurView>
+          )
         ) : (
           <>
             {isVideo && isRecipient ? (
@@ -177,6 +192,9 @@ const styles = StyleSheet.create({
     bottom: 0,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  blurFallback: {
+    backgroundColor: 'rgba(8,12,18,0.88)',
   },
   blurContent: {
     flex: 1,

@@ -7,7 +7,7 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
-import { resolveModalAnimationType } from '@/lib/device/androidPerfProfile';
+import { resolveModalAnimationType, getListPerfProps } from '@/lib/device/androidPerfProfile';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { OptimizedImage } from '@/components/media/OptimizedImage';
@@ -85,6 +85,7 @@ export function ShareToChatSheet({
             <ActivityIndicator color={colors.primary} style={styles.loader} />
           ) : (
             <FlatList
+              {...getListPerfProps()}
               data={conversations}
               keyExtractor={(item) => item.id}
               style={styles.list}

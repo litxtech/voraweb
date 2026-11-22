@@ -11,7 +11,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { resolveModalAnimationType } from '@/lib/device/androidPerfProfile';
+import { resolveModalAnimationType, getListPerfProps } from '@/lib/device/androidPerfProfile';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text } from '@/components/ui/Text';
@@ -179,6 +179,7 @@ export function ChatSearchSheet({
         </View>
 
         <FlatList
+          {...getListPerfProps()}
           data={results}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.list}

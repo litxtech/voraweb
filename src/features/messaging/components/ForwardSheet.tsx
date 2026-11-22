@@ -7,7 +7,7 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
-import { resolveModalAnimationType } from '@/lib/device/androidPerfProfile';
+import { resolveModalAnimationType, getListPerfProps } from '@/lib/device/androidPerfProfile';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@/components/ui/Text';
 import { radius, spacing } from '@/constants/theme';
@@ -78,6 +78,7 @@ export function ForwardSheet({
             <ActivityIndicator color={colors.primary} style={styles.loader} />
           ) : (
             <FlatList
+              {...getListPerfProps()}
               data={conversations}
               keyExtractor={(item) => item.id}
               style={styles.list}

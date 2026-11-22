@@ -4,11 +4,16 @@ import { OptimizedImage } from '@/components/media/OptimizedImage';
 import { getAndroidInstantPressableProps } from '@/lib/device/androidPerfProfile';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@/components/ui/Text';
-import { radius, spacing } from '@/constants/theme';
+import { spacing } from '@/constants/theme';
 import { useTheme } from '@/providers/ThemeProvider';
-import { useChatTheme } from '../hooks/useChatTheme';
 import type { ConversationListItem } from '../types';
-import { conversationAvatar, conversationTitle, formatConversationDraftPreview, formatMessageTime, groupMemberLabel } from '../utils';
+import {
+  conversationAvatar,
+  conversationTitle,
+  formatConversationDraftPreview,
+  formatMessageTime,
+  groupMemberLabel,
+} from '../utils';
 
 type ConversationRowProps = {
   item: ConversationListItem;
@@ -20,6 +25,9 @@ type ConversationRowProps = {
   subtitlePrefix?: string;
 };
 
+/** Avatar ölçüsü — satır aralığı ve ayırıcı girintisi bununla hesaplanır. */
+export const CONVERSATION_AVATAR_SIZE = 54;
+
 export const ConversationRow = memo(function ConversationRow({
   item,
   unreadCount,
@@ -30,7 +38,6 @@ export const ConversationRow = memo(function ConversationRow({
   subtitlePrefix,
 }: ConversationRowProps) {
   const { colors } = useTheme();
-  const chat = useChatTheme();
   const title = conversationTitle(item);
   const avatar = conversationAvatar(item);
   const isGroup = item.type === 'group';
@@ -46,91 +53,84 @@ export const ConversationRow = memo(function ConversationRow({
     .slice(0, 2)
     .toUpperCase();
 
+  const previewText =
+    draftPreview ??
+    item.lastMessagePreview ??
+    (isGroup ? groupMemberLabel(item.memberCount) : 'Henüz mesaj yok');
+
   return (
     <Pressable
-      style={[
-        styles.row,
-        {
-          backgroundColor: hasUnread ? chat.rowUnreadBg : chat.rowBg,
-          borderColor: item.isPinned ? colors.primary : chat.rowBorder,
-        },
-      ]}
+      // Kart görünümü yok: Instagram DM listesi gibi düz satır.
+      style={({ pressed }) => [styles.row, pressed ? styles.rowPressed : null]}
       onPress={onPress}
       onPressIn={onPressIn}
       onLongPress={onLongPress}
       {...getAndroidInstantPressableProps()}
     >
-      <View style={[styles.avatarRing, item.isPinned ? { borderColor: colors.primary } : null]}>
-        <View style={[styles.avatar, { backgroundColor: colors.surfaceElevated }]}>
-          {avatar ? (
-            <OptimizedImage
-              uri={avatar}
-              tier="avatar"
-              layoutWidth={46}
-              recyclingKey={item.id}
-              style={styles.avatarImage}
-              transition={0}
-            />
-          ) : isGroup ? (
-            <Ionicons name="people" size={22} color={colors.primary} />
-          ) : (
-            <Text variant="label" style={{ color: colors.primary }}>
-              {initials}
-            </Text>
-          )}
-        </View>
+      <View style={[styles.avatar, { backgroundColor: colors.surfaceElevated }]}>
+        {avatar ? (
+          <OptimizedImage
+            uri={avatar}
+            tier="avatar"
+            layoutWidth={CONVERSATION_AVATAR_SIZE}
+            recyclingKey={item.id}
+            style={styles.avatarImage}
+            transition={0}
+          />
+        ) : isGroup ? (
+          <Ionicons name="people" size={24} color={colors.primary} />
+        ) : (
+          <Text variant="label" style={{ color: colors.primary }}>
+            {initials}
+          </Text>
+        )}
       </View>
 
       <View style={styles.content}>
-        <View style={styles.topRow}>
-          <View style={styles.titleWrap}>
-            {item.isPinned ? <Ionicons name="pin" size={12} color={colors.primary} /> : null}
-            {isGroup ? <Ionicons name="people-outline" size={13} color={colors.textMuted} /> : null}
-            <Text
-              variant="label"
-              numberOfLines={1}
-              style={[styles.title, hasUnread ? styles.titleUnread : null]}
-            >
-              {title}
-            </Text>
-            {item.isMuted ? <Ionicons name="volume-mute" size={13} color={colors.textMuted} /> : null}
-          </View>
-          {item.lastMessageAt ? (
-            <Text
-              variant="caption"
-              style={{ color: hasUnread ? colors.primary : colors.textMuted, fontWeight: hasUnread ? '600' : '400' }}
-            >
-              {formatMessageTime(item.lastMessageAt)}
-            </Text>
+        <View style={styles.titleRow}>
+          {item.isPinned ? <Ionicons name="pin" size={12} color={colors.textMuted} /> : null}
+          <Text
+            numberOfLines={1}
+            style={[styles.title, hasUnread ? styles.titleUnread : null, { color: colors.text }]}
+          >
+            {title}
+          </Text>
+          {isGroup ? (
+            <Ionicons name="people-outline" size={13} color={colors.textMuted} />
+          ) : null}
+          {item.isMuted ? (
+            <Ionicons name="volume-mute" size={13} color={colors.textMuted} />
           ) : null}
         </View>
-        <View style={styles.bottomRow}>
+        <View style={styles.previewRow}>
           <Text
             numberOfLines={1}
             style={[
               styles.preview,
               hasDraft
-                ? { color: '#25A366', fontStyle: 'italic' }
+                ? styles.previewDraft
                 : { color: hasUnread ? colors.text : colors.textSecondary },
               hasUnread && !hasDraft ? styles.previewUnread : null,
             ]}
           >
             {subtitlePrefix}
-            {draftPreview ??
-              item.lastMessagePreview ??
-              (isGroup ? groupMemberLabel(item.memberCount) : 'Henüz mesaj yok')}
+            {previewText}
           </Text>
-          {hasUnread ? (
-            <View style={[styles.badge, { backgroundColor: colors.primary }]}>
-              <Text variant="caption" style={styles.badgeText}>
-                {effectiveUnread > 99 ? '99+' : effectiveUnread}
-              </Text>
-            </View>
-          ) : (
-            <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
-          )}
+          {item.lastMessageAt ? (
+            <Text
+              style={[
+                styles.time,
+                { color: hasUnread ? colors.text : colors.textMuted },
+                hasUnread ? styles.timeUnread : null,
+              ]}
+            >
+              {formatMessageTime(item.lastMessageAt)}
+            </Text>
+          ) : null}
         </View>
       </View>
+
+      {hasUnread ? <View style={[styles.unreadDot, { backgroundColor: colors.primary }]} /> : null}
     </Pressable>
   );
 });
@@ -139,22 +139,18 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
-    paddingVertical: 10,
+    gap: 12,
+    paddingVertical: 7,
     paddingHorizontal: spacing.md,
-    borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
+    minHeight: 68,
   },
-  avatarRing: {
-    padding: 2,
-    borderRadius: radius.full,
-    borderWidth: 2,
-    borderColor: 'transparent',
+  rowPressed: {
+    opacity: 0.6,
   },
   avatar: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
+    width: CONVERSATION_AVATAR_SIZE,
+    height: CONVERSATION_AVATAR_SIZE,
+    borderRadius: CONVERSATION_AVATAR_SIZE / 2,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
@@ -165,50 +161,50 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    gap: 4,
+    justifyContent: 'center',
+    gap: 2,
   },
-  topRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.sm,
-  },
-  titleWrap: {
-    flex: 1,
+  titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
   },
   title: {
-    flex: 1,
+    flexShrink: 1,
+    fontSize: 15,
+    lineHeight: 20,
   },
   titleUnread: {
     fontWeight: '700',
   },
-  bottomRow: {
+  previewRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     gap: spacing.sm,
   },
   preview: {
     flex: 1,
     fontSize: 14,
+    lineHeight: 19,
   },
   previewUnread: {
     fontWeight: '600',
   },
-  badge: {
-    minWidth: 20,
-    height: 20,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 5,
+  previewDraft: {
+    color: '#25A366',
+    fontStyle: 'italic',
   },
-  badgeText: {
-    color: '#fff',
+  time: {
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  timeUnread: {
     fontWeight: '700',
-    fontSize: 10,
+  },
+  unreadDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginLeft: 2,
   },
 });

@@ -9,7 +9,7 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
-import { resolveModalAnimationType } from '@/lib/device/androidPerfProfile';
+import { resolveModalAnimationType, getListPerfProps } from '@/lib/device/androidPerfProfile';
 import { openUrl } from '@/lib/linking/openUrl';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -297,6 +297,7 @@ export function ChatMediaGallery({
           </View>
         ) : isGrid ? (
           <FlatList
+            {...getListPerfProps()}
             key={`gallery-grid-${tab}`}
             data={items}
             keyExtractor={(item) => item.id}
@@ -316,6 +317,7 @@ export function ChatMediaGallery({
           />
         ) : (
           <FlatList
+            {...getListPerfProps()}
             key={`gallery-list-${tab}`}
             data={items}
             keyExtractor={(item) => item.id}

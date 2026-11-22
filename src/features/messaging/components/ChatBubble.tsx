@@ -17,10 +17,10 @@ import {
 import type { ChatMessage } from '../types';
 import { isHiddenPublicAccount } from '@/features/account-deletion/utils';
 import { openUrl } from '@/lib/linking/openUrl';
-import { displayParticipantName, formatChatLocationAddress, formatMessageTime, formatReplyPreview, parseFileContent, parseLocationContent } from '../utils';
+import { displayParticipantName, formatMessageTime, formatReplyPreview, parseFileContent } from '../utils';
 import { shouldShowQueuedVideoOverlay } from '../utils/reconcilePendingMessages';
-import { openChatLocationMap } from '../services/locationNavigation';
 import { ChatMediaAttachment } from './ChatMediaAttachment';
+import { ChatLocationBubble } from './ChatLocationBubble';
 import { ChatEphemeralMedia } from './ChatEphemeralMedia';
 import { ChatEphemeralExpiredNotice } from './ChatEphemeralExpiredNotice';
 import { isEphemeralMediaMessage } from '../services/ephemeralImage';
@@ -74,59 +74,6 @@ function StatusIcon({ status, readColor }: { status?: ChatMessage['localStatus']
     return <Ionicons name="checkmark-done" size={13} color="rgba(255,255,255,0.55)" />;
   }
   return <Ionicons name="checkmark" size={13} color="rgba(255,255,255,0.55)" />;
-}
-
-function ChatLocation({
-  content,
-  isMine,
-  labelColor,
-  metaColor,
-  sharedAt,
-  senderName,
-}: {
-  content: string;
-  isMine: boolean;
-  labelColor: string;
-  metaColor: string;
-  sharedAt?: string;
-  senderName?: string;
-}) {
-  const { colors } = useTheme();
-  const location = parseLocationContent(content);
-  if (!location) return <Text style={{ color: labelColor }}>Konum</Text>;
-
-  const title = location.label ?? formatChatLocationAddress(location);
-  const subtitle = formatChatLocationAddress(location);
-
-  return (
-    <Pressable
-      style={[styles.locationRow, { backgroundColor: isMine ? 'rgba(255,255,255,0.08)' : `${colors.primary}10` }]}
-      onPress={() =>
-        openChatLocationMap(location, {
-          sharedAt,
-          senderName,
-        })
-      }
-    >
-      <View style={[styles.locationIcon, { backgroundColor: isMine ? 'rgba(255,255,255,0.16)' : `${colors.primary}18` }]}>
-        <Ionicons name="location" size={22} color={isMine ? '#fff' : colors.primary} />
-      </View>
-      <View style={styles.locationText}>
-        <Text style={{ color: labelColor, fontWeight: '600' }} numberOfLines={2}>
-          {title}
-        </Text>
-        {subtitle !== title ? (
-          <Text variant="caption" style={{ color: metaColor }} numberOfLines={2}>
-            {subtitle}
-          </Text>
-        ) : null}
-        <Text variant="caption" style={{ color: metaColor }}>
-          {location.latitude.toFixed(5)}, {location.longitude.toFixed(5)} · Haritada aç
-        </Text>
-      </View>
-      <Ionicons name="chevron-forward" size={16} color={metaColor} />
-    </Pressable>
-  );
 }
 
 function ChatFile({ content, mediaUrl, isMine, labelColor }: { content: string; mediaUrl: string | null; isMine: boolean; labelColor: string }) {
@@ -218,7 +165,7 @@ export const ChatBubble = memo(function ChatBubble({
   onEphemeralViewed,
   ephemeralViewedAtByMessageId,
 }: ChatBubbleProps) {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const { colors } = useTheme();
   const chat = useChatTheme();
   const { width: screenWidth } = useWindowDimensions();
@@ -246,11 +193,25 @@ export const ChatBubble = memo(function ChatBubble({
     hasMediaCaption ||
     Boolean(message.replyTo || message.replyToId || message.forwardedFromId);
   const mediaOnly = isMediaMessage && !hasMediaExtra;
+  const isLocationMessage = message.messageType === 'location';
   const isReelShare = message.messageType === 'shared_reel';
   const isCallLog = message.messageType === 'call';
   const capOnly =
     isCapMessage && !Boolean(message.replyTo || message.replyToId || message.forwardedFromId);
-  const transparentBubble = mediaOnly || capOnly || isReelShare || isStoryReply || isCallLog;
+  const locationOnly =
+    isLocationMessage &&
+    !Boolean(message.replyTo || message.replyToId || message.forwardedFromId);
+  const coloredBubbleTransparent =
+    (isMine && chat.outgoingBubble === 'transparent') ||
+    (!isMine && chat.incomingBubble === 'transparent');
+  const transparentBubble =
+    mediaOnly ||
+    capOnly ||
+    locationOnly ||
+    isReelShare ||
+    isStoryReply ||
+    isCallLog ||
+    coloredBubbleTransparent;
   const callLogMeta = isCallLog ? parseCallLogMetadata(message.metadata) : null;
   const metaRecord = message.metadata as Record<string, unknown> | null | undefined;
   const heyetDecisionMeta = metaRecord?.kind === 'heyet_decision' ? metaRecord : null;
@@ -368,8 +329,8 @@ export const ChatBubble = memo(function ChatBubble({
       style={[
         styles.bubble,
         isMine ? styles.bubbleMine : styles.bubbleTheirs,
-        isMediaMessage || isCapMessage ? styles.bubbleMedia : null,
-        mediaOnly || capOnly ? styles.bubbleMediaOnly : null,
+        isMediaMessage || isCapMessage || isLocationMessage ? styles.bubbleMedia : null,
+        mediaOnly || capOnly || locationOnly ? styles.bubbleMediaOnly : null,
         isReelShare ? styles.bubbleReelShare : null,
         isStoryReply ? styles.bubbleReelShare : null,
         isCallLog ? styles.bubbleCallLog : null,
@@ -469,7 +430,7 @@ export const ChatBubble = memo(function ChatBubble({
             />
           ) : (
             <ChatMediaAttachment
-              uri={message.mediaUrl}
+              uri={(message.localMediaUri ?? message.mediaUrl)!}
               onDoublePress={canQuote ? onDoublePress : undefined}
             />
           )
@@ -518,11 +479,14 @@ export const ChatBubble = memo(function ChatBubble({
                       avatarUrl: message.sender?.avatar_url ?? null,
                     }
               }
+              compact
               onMessageLongPress={onLongPress}
             />
           </View>
         ) : null}
-        {contentVisible && message.messageType === 'video' && message.mediaUrl ? (
+        {contentVisible &&
+        message.messageType === 'video' &&
+        (message.mediaUrl || message.localMediaUri) ? (
           isEphemeralMedia && message.localStatus !== 'sending' && !shouldShowQueuedVideoOverlay(message) ? (
             <ChatEphemeralMedia
               message={message}
@@ -534,7 +498,7 @@ export const ChatBubble = memo(function ChatBubble({
             />
           ) : (
             <ChatVideoAttachment
-              uri={message.mediaUrl}
+              uri={(message.mediaUrl ?? message.localMediaUri)!}
               localMediaUri={message.localMediaUri}
               uploadStage={message.uploadStage}
               uploadProgress={message.uploadProgress}
@@ -558,14 +522,20 @@ export const ChatBubble = memo(function ChatBubble({
           />
         ) : null}
         {contentVisible && message.messageType === 'location' ? (
-          <ChatLocation
-            content={message.content}
-            isMine={isMine}
-            labelColor={textColor}
-            metaColor={metaColor}
-            sharedAt={message.createdAt}
-            senderName={message.sender ? displayParticipantName(message.sender) : undefined}
-          />
+          <View style={locationOnly ? null : styles.mediaBubbleInset}>
+            <ChatLocationBubble
+              content={message.content}
+              sharedAt={message.createdAt}
+              senderName={message.sender ? displayParticipantName(message.sender) : undefined}
+              avatarUrl={
+                message.sender?.avatar_url ??
+                (isMine ? (profile?.avatar_url ?? null) : null)
+              }
+              textColor={locationOnly ? colors.text : textColor}
+              metaColor={locationOnly ? colors.textMuted : metaColor}
+              accentColor={isMine ? chat.accentRead : chat.replyAccent}
+            />
+          </View>
         ) : null}
         {contentVisible && isCallLog && callLogMeta && callPeerUserId ? (
           <ChatCallLog
@@ -845,25 +815,6 @@ const styles = StyleSheet.create({
   metaText: {
     fontSize: 11,
     lineHeight: 13,
-  },
-  locationRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    minWidth: 220,
-    borderRadius: radius.md,
-    padding: spacing.sm,
-  },
-  locationIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  locationText: {
-    flex: 1,
-    gap: 2,
   },
   fileRow: {
     flexDirection: 'row',

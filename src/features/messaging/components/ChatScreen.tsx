@@ -37,6 +37,7 @@ import { IzdivacChatBanner } from '@/features/izdivac/components/IzdivacChatBann
 import { fetchHeyetCaseForConversation } from '@/features/heyet/services/heyetData';
 import type { HeyetCase } from '@/features/heyet/types';
 import { CapsPickerSheet, capMediaUrl, recordCapUsage, toCapMessageMetadata } from '@/features/caps';
+import { prefetchCapsPickerLibrary } from '@/features/caps/services/capsPickerCache';
 import type { Cap } from '@/features/caps/types';
 import { spacing } from '@/constants/theme';
 import { useTheme } from '@/providers/ThemeProvider';
@@ -147,11 +148,13 @@ import {
 } from '../constants';
 import { useChatAutoScroll } from '../hooks/useChatAutoScroll';
 import { useMessageDrafts } from '../hooks/useMessageDrafts';
-import { useChatTheme } from '../hooks/useChatTheme';
+import { useChatWallpaper } from '../hooks/useChatWallpaper';
+import { ChatThemeOverrideProvider } from '../providers/ChatThemeOverrideProvider';
 import { getMessageDraft, setMessageDraft } from '../services/messageDrafts';
 import { useMessagingStore } from '../store/messagingStore';
 import { ChatBackground } from './ChatBackground';
 import { ChatConversationLayout } from './ChatConversationLayout';
+import { ChatWallpaperPicker } from './ChatWallpaperPicker';
 import { useChatMediaViewer } from '../context/ChatMediaViewerContext';
 import { buildEphemeralImageMetadata } from '../services/ephemeralImage';
 import { useEphemeralMessageExpiry } from '../hooks/useEphemeralMessageExpiry';
@@ -227,10 +230,11 @@ export function ChatScreen() {
   const { user, profile, isLoading: authLoading } = useAuth();
   const { requireAuth } = useRequireAuth();
   const { colors } = useTheme();
-  const chat = useChatTheme();
+  const wallpaper = useChatWallpaper(id);
   const { openMedia } = useChatMediaViewer();
   useMessageDrafts(user?.id);
   const showAttachPhoto = useFeatureVisible(MESSAGING_FEATURE.attachPhoto);
+  const showCapsAttach = useFeatureVisible('caps');
   const showAttachVideo = useFeatureVisible(MESSAGING_FEATURE.attachVideo);
   const showAttachFile = useFeatureVisible(MESSAGING_FEATURE.attachFile);
   const showAttachLocation = useFeatureVisible(MESSAGING_FEATURE.attachLocation);
@@ -285,6 +289,7 @@ export function ChatScreen() {
   const [pendingVoice, setPendingVoice] = useState<{ uri: string; durationSec: number } | null>(null);
   const [searchVisible, setSearchVisible] = useState(false);
   const [galleryVisible, setGalleryVisible] = useState(false);
+  const [wallpaperPickerOpen, setWallpaperPickerOpen] = useState(false);
   const [quickCaptureVisible, setQuickCaptureVisible] = useState(false);
   const [quickSnapEphemeral, setQuickSnapEphemeral] = useState(true);
   const [capsPickerOpen, setCapsPickerOpen] = useState(false);
@@ -341,6 +346,11 @@ export function ChatScreen() {
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (!user?.id || !showCapsAttach) return;
+    prefetchCapsPickerLibrary(user.id);
+  }, [user?.id, showCapsAttach]);
 
   const handleOpenAttachmentPreview = useCallback(
     (uri: string, type: 'image' | 'video') => {
@@ -1064,6 +1074,7 @@ export function ChatScreen() {
     // odaktayken yedek olarak çalışır — arka plandayken gereksiz ağ/ısınma olmaz.
     const poll = setInterval(() => {
       if (!screenFocusedRef.current) return;
+      if (AppState.currentState !== 'active') return;
       void refreshPresence();
     }, 30_000);
 
@@ -2739,13 +2750,34 @@ export function ChatScreen() {
 
   if (!displayConversation) return null;
 
+  /**
+   * Header yalnızca galeri görselinde şeffaf kalır.
+   * Alt input şeridi ise her zaman şeffaf: duvar kağıdı ekranın tamamında kesintisiz görünür.
+   */
+  const wallpaperHeaderTransparent = wallpaper.hasImage;
+  const wallpaperHex = wallpaper.hasCustomColor ? wallpaper.color.hex : null;
+
   return (
-    <SafeAreaView style={[styles.flex, { backgroundColor: chat.screenBg }]} edges={['top']}>
+    <ChatThemeOverrideProvider
+      ownBubbleId={wallpaper.ownBubble.id}
+      otherBubbleId={wallpaper.otherBubble.id}
+    >
+    <View style={styles.flex}>
+      {/* Tam ekran arka plan — header + input + safe-area altı */}
+      <View style={StyleSheet.absoluteFill} pointerEvents="none">
+        <ChatBackground colorHex={wallpaperHex} imageUri={wallpaper.imageUri} />
+      </View>
+      <SafeAreaView
+        style={[styles.flex, { backgroundColor: 'transparent' }]}
+        edges={['top']}
+      >
       <ChatHeader
         conversation={displayConversation}
         typingLabel={typingLabel}
         onSearchPress={() => setSearchVisible(true)}
         onGalleryPress={() => setGalleryVisible(true)}
+        onWallpaperPress={() => setWallpaperPickerOpen(true)}
+        transparent={wallpaperHeaderTransparent}
         hideCalls={blockStatus?.cannotCommunicate ?? false}
         onMenuPress={() => {
           if (!id || !user?.id) return;
@@ -2821,9 +2853,9 @@ export function ChatScreen() {
           data={displayMessages}
           keyExtractor={(item) => item.id}
           renderItem={renderMessage}
-          footerBackgroundColor={chat.composerBg}
-          footerSolidColor={chat.composerBgSolid}
-          background={<ChatBackground />}
+          footerBackgroundColor="transparent"
+          footerSolidColor="transparent"
+          background={null}
           contentContainerStyle={styles.listContent}
           listProps={chatListProps}
           footer={
@@ -2844,10 +2876,18 @@ export function ChatScreen() {
                   conversationId={id}
                   initialDraft={conversationDraft}
                   onDraftChange={handleDraftChange}
+                  chromeTransparent
                   onSend={handleSend}
                   onTyping={() => broadcastActivity('typing')}
                   onAttach={showAttachmentMenu}
-                  onCaps={() => setCapsPickerOpen(true)}
+                  onCaps={
+                    showCapsAttach
+                      ? () => {
+                          if (user?.id) prefetchCapsPickerLibrary(user.id);
+                          setCapsPickerOpen(true);
+                        }
+                      : undefined
+                  }
                   onQuickCapture={handleQuickCapture}
                   onQuickCaptureModeToggle={handleQuickCaptureModeToggle}
                   quickCaptureEphemeral={quickSnapEphemeral}
@@ -2908,6 +2948,23 @@ export function ChatScreen() {
         onSelectMessage={jumpToMessage}
       />
 
+      <ChatWallpaperPicker
+        visible={wallpaperPickerOpen}
+        onClose={() => setWallpaperPickerOpen(false)}
+        colors={wallpaper.colors}
+        bubbleColors={wallpaper.bubbleColors}
+        selectedId={wallpaper.color.id}
+        hasImage={wallpaper.hasImage}
+        imageUri={wallpaper.imageUri}
+        ownBubbleId={wallpaper.ownBubble.id}
+        otherBubbleId={wallpaper.otherBubble.id}
+        onSelectColor={(colorId) => void wallpaper.setColor(colorId)}
+        onPickGallery={() => void wallpaper.pickGalleryImage()}
+        onClearImage={() => void wallpaper.clearImage()}
+        onSelectOwnBubble={(bubbleId) => void wallpaper.setOwnBubble(bubbleId)}
+        onSelectOtherBubble={(bubbleId) => void wallpaper.setOtherBubble(bubbleId)}
+      />
+
       <ForwardSheet
         visible={!!forwardMessage || forwardMessages.length > 0}
         message={forwardMessage}
@@ -2940,13 +2997,15 @@ export function ChatScreen() {
         </Pressable>
       </Modal>
 
-      <CapsPickerSheet
-        visible={capsPickerOpen}
-        onClose={() => setCapsPickerOpen(false)}
-        onSelect={(cap) => {
-          void handleSendCap(cap);
-        }}
-      />
+      {showCapsAttach ? (
+        <CapsPickerSheet
+          visible={capsPickerOpen}
+          onClose={() => setCapsPickerOpen(false)}
+          onSelect={(cap) => {
+            void handleSendCap(cap);
+          }}
+        />
+      ) : null}
 
       {reportMessageId ? (
         <ReportSheet
@@ -2998,7 +3057,9 @@ export function ChatScreen() {
         onSend={handleConfirmImageSend}
       />
 
-    </SafeAreaView>
+      </SafeAreaView>
+    </View>
+    </ChatThemeOverrideProvider>
   );
 }
 

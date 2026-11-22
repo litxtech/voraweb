@@ -159,6 +159,15 @@ export function ChatQuickCapture({
     };
   }, [visible, cameraPermission?.granted]);
 
+  // Modal ilk açıldığında izin sorulmadıysa siyah "hazırlanıyor" ekranında kalmasın.
+  useEffect(() => {
+    if (!visible) return;
+    if (cameraPermission?.granted) return;
+    if (cameraPermission && !cameraPermission.granted && cameraPermission.canAskAgain) {
+      void requestCameraPermission();
+    }
+  }, [visible, cameraPermission, requestCameraPermission]);
+
   useEffect(() => {
     return () => {
       if (videoModeReadyTimeoutRef.current) {
@@ -235,7 +244,6 @@ export function ChatQuickCapture({
     handleZoomRailStart,
     handleZoomRailEnd,
     flipCameraWithReset,
-    showManualControls,
     isPinchingRef,
   } = useCaptureCameraZoom({
     enabled: cameraLive,
@@ -500,10 +508,11 @@ export function ChatQuickCapture({
             {cameraLive ? (
               <CaptureCameraZoomOverlay
                 enabled
-                showManualControls={showManualControls}
+                showZoomChrome
+                showManualControls={false}
                 bounds={{
-                  top: insets.top + 56,
-                  bottom: insets.bottom + 200,
+                  top: insets.top + 64,
+                  bottom: insets.bottom + 248,
                 }}
                 linearZoom={linearZoom}
                 displayZoom={displayZoom}
@@ -518,7 +527,7 @@ export function ChatQuickCapture({
               />
             ) : null}
 
-            {!cameraReady ? (
+            {cameraLive && !cameraReady ? (
               <View style={styles.cameraLoading} pointerEvents="none">
                 <ActivityIndicator color="#fff" size="large" />
               </View>
@@ -526,13 +535,14 @@ export function ChatQuickCapture({
 
             <View style={[styles.topBar, { paddingTop: insets.top + spacing.sm }]}>
               <Pressable onPress={handleClose} style={styles.iconCircle} hitSlop={12} accessibilityLabel="Kapat">
-                <Ionicons name="close" size={26} color="#fff" />
+                <Ionicons name="close" size={24} color="#fff" />
               </Pressable>
               {recording ? (
                 <View style={styles.recordingBadge}>
                   <View style={styles.recordingDot} />
                   <Text style={styles.recordingTime}>
-                    {formatRecordingTime(recordingElapsedSec)} / {formatRecordingTime(CHAT_VIDEO_MAX_DURATION_SEC)}
+                    {formatRecordingTime(recordingElapsedSec)} /{' '}
+                    {formatRecordingTime(CHAT_VIDEO_MAX_DURATION_SEC)}
                   </Text>
                 </View>
               ) : (
@@ -545,81 +555,149 @@ export function ChatQuickCapture({
                 accessibilityLabel="Kamerayı çevir"
                 disabled={recording || busy}
               >
-                <Ionicons name="camera-reverse-outline" size={24} color="#fff" />
+                <Ionicons name="camera-reverse-outline" size={22} color="#fff" />
               </Pressable>
             </View>
 
-            <View style={[styles.bottomBar, { paddingBottom: insets.bottom + spacing.lg }]}>
-              <View style={styles.modeRow}>
-                <Pressable
-                  onPress={() => switchCaptureMode('photo')}
-                  style={[
-                    styles.modeBtn,
-                    captureMode === 'photo' ? { backgroundColor: colors.primary } : styles.modeBtnIdle,
-                  ]}
-                >
-                  <Ionicons name="camera-outline" size={16} color="#fff" />
-                  <Text variant="caption" style={styles.modeBtnText}>
-                    Fotoğraf
-                  </Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => switchCaptureMode('video')}
-                  style={[
-                    styles.modeBtn,
-                    captureMode === 'video' ? { backgroundColor: colors.primary } : styles.modeBtnIdle,
-                  ]}
-                >
-                  <Ionicons name="videocam-outline" size={16} color="#fff" />
-                  <Text variant="caption" style={styles.modeBtnText}>
-                    Video
-                  </Text>
-                </Pressable>
+            <View
+              style={[styles.bottomDock, { paddingBottom: Math.max(insets.bottom, 14) + 8 }]}
+              pointerEvents="box-none"
+            >
+              <View style={styles.dockCard}>
+                <View style={styles.segmentTrack}>
+                  <Pressable
+                    onPress={() => switchCaptureMode('photo')}
+                    disabled={recording}
+                    style={[
+                      styles.segmentItem,
+                      captureMode === 'photo' && styles.segmentItemOn,
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: captureMode === 'photo' }}
+                    accessibilityLabel="Fotoğraf"
+                  >
+                    <Ionicons
+                      name="camera"
+                      size={15}
+                      color={captureMode === 'photo' ? '#0B0F14' : 'rgba(255,255,255,0.72)'}
+                    />
+                    <Text
+                      style={[
+                        styles.segmentLabel,
+                        captureMode === 'photo' && styles.segmentLabelOn,
+                      ]}
+                    >
+                      Fotoğraf
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => switchCaptureMode('video')}
+                    disabled={recording}
+                    style={[
+                      styles.segmentItem,
+                      captureMode === 'video' && styles.segmentItemOn,
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: captureMode === 'video' }}
+                    accessibilityLabel="Video"
+                  >
+                    <Ionicons
+                      name="videocam"
+                      size={15}
+                      color={captureMode === 'video' ? '#0B0F14' : 'rgba(255,255,255,0.72)'}
+                    />
+                    <Text
+                      style={[
+                        styles.segmentLabel,
+                        captureMode === 'video' && styles.segmentLabelOn,
+                      ]}
+                    >
+                      Video
+                    </Text>
+                  </Pressable>
+                </View>
+
+                <View style={styles.segmentTrack}>
+                  <Pressable
+                    onPress={() => onEphemeralChange(true)}
+                    disabled={recording}
+                    style={[styles.segmentItem, ephemeral && styles.segmentItemTimed]}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: ephemeral }}
+                    accessibilityLabel={`Süreli ${CHAT_EPHEMERAL_DEFAULT_DURATION_SEC} saniye`}
+                  >
+                    <Ionicons
+                      name="timer-outline"
+                      size={15}
+                      color={ephemeral ? '#0B0F14' : 'rgba(255,255,255,0.72)'}
+                    />
+                    <Text style={[styles.segmentLabel, ephemeral && styles.segmentLabelOn]}>
+                      Süreli · {CHAT_EPHEMERAL_DEFAULT_DURATION_SEC}s
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => onEphemeralChange(false)}
+                    disabled={recording}
+                    style={[styles.segmentItem, !ephemeral && styles.segmentItemOn]}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: !ephemeral }}
+                    accessibilityLabel="Süresiz"
+                  >
+                    <Ionicons
+                      name="infinite-outline"
+                      size={15}
+                      color={!ephemeral ? '#0B0F14' : 'rgba(255,255,255,0.72)'}
+                    />
+                    <Text style={[styles.segmentLabel, !ephemeral && styles.segmentLabelOn]}>
+                      Süresiz
+                    </Text>
+                  </Pressable>
+                </View>
+
+                <View style={styles.shutterRow}>
+                  <View style={styles.shutterSide} />
+                  <Pressable
+                    onPress={handleShutterPress}
+                    disabled={shutterDisabled && !recording}
+                    accessibilityLabel={
+                      captureMode === 'video' ? 'Video kaydet' : 'Fotoğraf çek'
+                    }
+                    style={[
+                      styles.shutterOuter,
+                      recording && styles.shutterOuterRecording,
+                      shutterDisabled && !recording && { opacity: 0.55 },
+                    ]}
+                  >
+                    {busy && !recording ? (
+                      <ActivityIndicator color="#111" size="large" />
+                    ) : (
+                      <View
+                        style={[styles.shutterInner, recording && styles.shutterInnerRecording]}
+                      />
+                    )}
+                  </Pressable>
+                  <View style={styles.shutterSide}>
+                    {ephemeral ? (
+                      <View style={styles.timedPill}>
+                        <Ionicons name="flame" size={12} color="#FFB020" />
+                        <Text style={styles.timedPillText}>
+                          {CHAT_EPHEMERAL_DEFAULT_DURATION_SEC}s
+                        </Text>
+                      </View>
+                    ) : null}
+                  </View>
+                </View>
+
+                <Text style={styles.hintText}>
+                  {captureMode === 'video'
+                    ? recording
+                      ? 'Durdurmak için deklanşöre dokun'
+                      : 'İki parmakla yakınlaştır · deklanşöre dokun'
+                    : cameraReady
+                      ? 'İki parmakla yakınlaştır · çekmek için dokun'
+                      : 'Kamera hazırlanıyor…'}
+                </Text>
               </View>
-
-              <View style={styles.modeRow}>
-                <Pressable
-                  onPress={() => onEphemeralChange(true)}
-                  style={[styles.modeBtn, ephemeral ? { backgroundColor: colors.primary } : styles.modeBtnIdle]}
-                >
-                  <Ionicons name="timer-outline" size={16} color="#fff" />
-                  <Text variant="caption" style={styles.modeBtnText}>
-                    Süreli ({CHAT_EPHEMERAL_DEFAULT_DURATION_SEC}s)
-                  </Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => onEphemeralChange(false)}
-                  style={[styles.modeBtn, !ephemeral ? { backgroundColor: colors.primary } : styles.modeBtnIdle]}
-                >
-                  <Ionicons name="infinite-outline" size={16} color="#fff" />
-                  <Text variant="caption" style={styles.modeBtnText}>
-                    Süresiz
-                  </Text>
-                </Pressable>
-              </View>
-
-              <Text variant="caption" style={styles.hintText}>
-                {captureMode === 'video'
-                  ? recording
-                    ? 'Durdurmak için tekrar dokun · pinch ile yakınlaştır'
-                    : 'Videoyu başlatmak için dokun'
-                  : cameraReady
-                    ? 'Fotoğraf için dokun'
-                    : 'Kamera hazırlanıyor…'}
-              </Text>
-
-              <Pressable
-                onPress={handleShutterPress}
-                disabled={shutterDisabled && !recording}
-                accessibilityLabel={captureMode === 'video' ? 'Video kaydet' : 'Fotoğraf çek'}
-                style={[styles.shutterOuter, recording && styles.shutterOuterRecording, shutterDisabled && !recording && { opacity: 0.65 }]}
-              >
-                {busy && !recording ? (
-                  <ActivityIndicator color="#111" size="large" />
-                ) : (
-                  <View style={[styles.shutterInner, recording && styles.shutterInnerRecording]} />
-                )}
-              </Pressable>
             </View>
           </>
         )}
@@ -637,7 +715,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#000',
   },
   cameraLoading: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(0,0,0,0.25)',
@@ -680,74 +758,136 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontVariant: ['tabular-nums'],
   },
-  bottomBar: {
+  bottomDock: {
     position: 'absolute',
     left: 0,
     right: 0,
     bottom: 0,
-    alignItems: 'center',
-    gap: spacing.md,
     paddingHorizontal: spacing.md,
     zIndex: 10,
     elevation: 10,
   },
+  dockCard: {
+    borderRadius: 28,
+    paddingHorizontal: 14,
+    paddingTop: 14,
+    paddingBottom: 12,
+    gap: 12,
+    backgroundColor: 'rgba(8,12,18,0.72)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.14)',
+  },
+  segmentTrack: {
+    flexDirection: 'row',
+    gap: 6,
+    padding: 4,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  segmentItem: {
+    flex: 1,
+    minHeight: 40,
+    borderRadius: 999,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+  },
+  segmentItemOn: {
+    backgroundColor: '#fff',
+  },
+  segmentItemTimed: {
+    backgroundColor: '#FFD27A',
+  },
+  segmentLabel: {
+    color: 'rgba(255,255,255,0.78)',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  segmentLabelOn: {
+    color: '#0B0F14',
+  },
+  shutterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 2,
+  },
+  shutterSide: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 28,
+  },
+  timedPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,176,32,0.18)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,176,32,0.45)',
+  },
+  timedPillText: {
+    color: '#FFD27A',
+    fontSize: 11,
+    fontWeight: '800',
+  },
   hintText: {
-    color: 'rgba(255,255,255,0.88)',
+    color: 'rgba(255,255,255,0.55)',
     fontWeight: '600',
+    fontSize: 11,
     textAlign: 'center',
   },
   iconCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(0,0,0,0.45)',
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.16)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  modeRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    width: '100%',
-  },
   modeBtn: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.xs,
     paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
     borderRadius: radius.lg,
-  },
-  modeBtnIdle: {
-    backgroundColor: 'rgba(0,0,0,0.45)',
   },
   modeBtnText: {
     color: '#fff',
     fontWeight: '700',
   },
   shutterOuter: {
-    width: 84,
-    height: 84,
-    borderRadius: 42,
-    borderWidth: 5,
+    width: 78,
+    height: 78,
+    borderRadius: 39,
+    borderWidth: 4,
     borderColor: '#fff',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: 'rgba(255,255,255,0.1)',
   },
   shutterOuterRecording: {
     borderColor: '#ff3b30',
   },
   shutterInner: {
-    width: 66,
-    height: 66,
-    borderRadius: 33,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     backgroundColor: '#fff',
   },
   shutterInnerRecording: {
-    width: 34,
-    height: 34,
-    borderRadius: radius.sm,
+    width: 30,
+    height: 30,
+    borderRadius: 8,
     backgroundColor: '#ff3b30',
   },
   permissionWrap: {

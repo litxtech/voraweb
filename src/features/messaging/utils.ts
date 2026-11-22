@@ -41,22 +41,48 @@ export function conversationAvatar(item: ConversationListItem): string | null {
   return participantAvatarUrl(item.otherUser);
 }
 
+const timeLabelCache = new Map<string, { label: string; dayKey: string }>();
+const TIME_LABEL_CACHE_MAX = 400;
+
+/**
+ * Sohbet listesinde her satır her render'da `Intl`/`Date` ayırıyordu (Hermes'te
+ * en pahalı yollardan biri). Gün anahtarı değişene kadar (bugün/dün/tarih)
+ * sonuç önbellekten döner.
+ */
 export function formatMessageTime(iso: string): string {
   const date = new Date(iso);
   const now = new Date();
-  const isToday = date.toDateString() === now.toDateString();
+  const todayKey = now.toDateString();
+
+  const cached = timeLabelCache.get(iso);
+  if (cached && cached.dayKey === todayKey) return cached.label;
+
+  const isToday = date.toDateString() === todayKey;
 
   if (isToday) {
-    return date.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+    const label = date.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+    cacheTimeLabel(iso, label, todayKey);
+    return label;
   }
 
   const yesterday = new Date(now);
   yesterday.setDate(yesterday.getDate() - 1);
   if (date.toDateString() === yesterday.toDateString()) {
+    cacheTimeLabel(iso, 'Dün', todayKey);
     return 'Dün';
   }
 
-  return date.toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' });
+  const label = date.toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' });
+  cacheTimeLabel(iso, label, todayKey);
+  return label;
+}
+
+function cacheTimeLabel(iso: string, label: string, dayKey: string): void {
+  if (timeLabelCache.size >= TIME_LABEL_CACHE_MAX) {
+    const oldest = timeLabelCache.keys().next();
+    if (!oldest.done) timeLabelCache.delete(oldest.value);
+  }
+  timeLabelCache.set(iso, { label, dayKey });
 }
 
 export type PresenceStatus = {

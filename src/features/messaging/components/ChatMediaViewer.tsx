@@ -19,7 +19,7 @@ type ChatMediaViewerProps = {
   onEphemeralExpired?: () => void;
 };
 
-/** Sohbet medyası — tam ekran görüntü veya video oynatıcı. */
+/** Sohbet medyası — tam ekran; boşluğa veya çarpıya basınca kapanır. */
 export function ChatMediaViewer({
   uri,
   isVideo,
@@ -49,9 +49,11 @@ export function ChatMediaViewer({
       })
       .catch((err) => {
         if (!cancelled) {
-          setPrepareError(toUserFacingError(err instanceof Error ? err.message : null, {
-            fallback: 'Video hazırlanamadı',
-          }));
+          setPrepareError(
+            toUserFacingError(err instanceof Error ? err.message : null, {
+              fallback: 'Video hazırlanamadı',
+            }),
+          );
         }
       });
 
@@ -78,7 +80,7 @@ export function ChatMediaViewer({
     return () => clearInterval(intervalId);
   }, [ephemeralDurationSec, onClose, onEphemeralExpired, uri]);
 
-  const showVideo = isVideo && !prepareError && Boolean(playbackUri);
+  const canDismissByBackdrop = !ephemeralDurationSec;
 
   return (
     <Modal
@@ -90,7 +92,17 @@ export function ChatMediaViewer({
     >
       <StatusBar style="light" />
       <View style={styles.container}>
-        <View style={[styles.stage, { paddingBottom: insets.bottom }]} collapsable={false}>
+        {/* Boş alan / karartı — tıklayınca çık */}
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          onPress={canDismissByBackdrop ? onClose : undefined}
+          accessibilityLabel="Kapat"
+        />
+
+        <View
+          style={[styles.stage, { paddingTop: insets.top, paddingBottom: insets.bottom }]}
+          pointerEvents="box-none"
+        >
           {isVideo ? (
             prepareError ? (
               <Pressable style={styles.prepareError} onPress={onClose} accessibilityLabel="Kapat">
@@ -100,7 +112,9 @@ export function ChatMediaViewer({
                 </Text>
               </Pressable>
             ) : playbackUri ? (
-              <ChatVideoPlayer key={playbackUri} uri={playbackUri} autoPlay />
+              <View style={styles.videoBox} pointerEvents="box-none">
+                <ChatVideoPlayer key={playbackUri} uri={playbackUri} autoPlay />
+              </View>
             ) : (
               <Pressable style={styles.prepareError} onPress={onClose} accessibilityLabel="Kapat">
                 <ActivityIndicator color="#fff" size="large" />
@@ -112,22 +126,13 @@ export function ChatMediaViewer({
           ) : (
             <Pressable
               style={styles.imageStage}
-              onPress={ephemeralDurationSec ? undefined : onClose}
-              accessibilityLabel={ephemeralDurationSec ? undefined : 'Kapat'}
+              onPress={canDismissByBackdrop ? onClose : undefined}
+              accessibilityLabel={canDismissByBackdrop ? 'Kapat' : undefined}
             >
               <Image source={{ uri }} style={styles.media} contentFit="contain" />
             </Pressable>
           )}
         </View>
-
-        {showVideo ? (
-          <Pressable
-            style={[styles.dismissZoneTop, { height: insets.top + 56 }]}
-            onPress={onClose}
-            accessibilityRole="button"
-            accessibilityLabel="Kapat"
-          />
-        ) : null}
 
         <Pressable
           style={[
@@ -164,8 +169,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#000',
   },
   stage: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+  },
+  videoBox: {
     flex: 1,
-    backgroundColor: '#000',
+    justifyContent: 'center',
   },
   imageStage: {
     flex: 1,
@@ -187,13 +196,6 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.9)',
     textAlign: 'center',
     fontWeight: '600',
-  },
-  dismissZoneTop: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 88,
-    zIndex: 10,
   },
   closeBtn: {
     position: 'absolute',

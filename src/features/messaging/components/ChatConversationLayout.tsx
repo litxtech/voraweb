@@ -16,6 +16,7 @@ import { StickyKeyboardFooter } from '@/components/keyboard';
 import { CHAT_BUBBLE_ABOVE_INPUT, CHAT_COMPOSER_MIN_HEIGHT } from '../constants';
 import { ChatKeyboardScrollProvider } from '../context/ChatKeyboardScrollContext';
 import { ChatFlatListScrollView } from './ChatFlatListScrollView';
+import { getListPerfProps } from '@/lib/device/androidPerfProfile';
 
 type ChatConversationLayoutProps<T> = {
   listRef: RefObject<FlatList<T> | null>;
@@ -114,6 +115,7 @@ export function ChatConversationLayout<T>({
       <View style={styles.root}>
         {background}
         <FlatList
+          {...getListPerfProps()}
           ref={listRef}
           data={data}
           inverted

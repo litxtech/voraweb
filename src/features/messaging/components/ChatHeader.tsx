@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Image, Pressable, StyleSheet, View } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,31 +22,45 @@ import { useChatTheme } from '../hooks/useChatTheme';
 import { usePresenceClock } from '../hooks/usePresenceClock';
 import { useFeatureVisible } from '@/features/feature-flags/hooks/useFeatureVisible';
 import { MESSAGING_FEATURE } from '@/features/messaging/featureFlags';
+import { TIP_ACCENT, TipSheet, useTipAllowed } from '@/features/tips';
+import { ChatHeaderMenuSheet, type ChatHeaderMenuItem } from './ChatHeaderMenuSheet';
 
-const TOOLBAR_HEIGHT = 44;
+const TOOLBAR_HEIGHT = 52;
 const AVATAR_SIZE = 36;
+const ACTION_SIZE = 40;
 
 type ChatHeaderProps = {
   conversation: ConversationDetail;
   typingLabel?: string | null;
   onSearchPress?: () => void;
   onGalleryPress?: () => void;
+  onWallpaperPress?: () => void;
   onMenuPress?: () => void;
   hideCalls?: boolean;
+  /** Arka plan üstünde — şeffaf header */
+  transparent?: boolean;
 };
 
 function HeaderAction({
   icon,
   color,
   onPress,
+  accessibilityLabel,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   color: string;
   onPress?: () => void;
+  accessibilityLabel?: string;
 }) {
   if (!onPress) return null;
   return (
-    <Pressable style={styles.iconBtn} onPress={onPress} hitSlop={6}>
+    <Pressable
+      style={({ pressed }) => [styles.iconBtn, pressed && styles.iconBtnPressed]}
+      onPress={onPress}
+      hitSlop={4}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+    >
       <Ionicons name={icon} size={22} color={color} />
     </Pressable>
   );
@@ -56,8 +71,10 @@ export function ChatHeader({
   typingLabel,
   onSearchPress,
   onGalleryPress,
+  onWallpaperPress,
   onMenuPress,
   hideCalls = false,
+  transparent = false,
 }: ChatHeaderProps) {
   const { colors } = useTheme();
   const chat = useChatTheme();
@@ -69,9 +86,14 @@ export function ChatHeader({
   const showChatMenu = useFeatureVisible(MESSAGING_FEATURE.chatMenu);
   const showGroupInfo = useFeatureVisible(MESSAGING_FEATURE.chatGroupInfo);
   const { initiateOutgoingCall, gateVisible, gateCallType, closeGate } = usePremiumOutgoingCall();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [tipOpen, setTipOpen] = useState(false);
   const isGroup = conversation.type === 'group';
   const otherUser = conversation.otherUser;
   const otherAvatarUrl = participantAvatarUrl(otherUser);
+  const tipRecipient =
+    !isGroup && otherUser && !isHiddenPublicAccount(otherUser.account_status) ? otherUser : null;
+  const tipAllowed = useTipAllowed(tipRecipient?.id, 'message');
 
   const title = isGroup
     ? (conversation.title ?? 'Grup Sohbeti')
@@ -116,10 +138,77 @@ export function ChatHeader({
     void initiateOutgoingCall(conversation.otherUser.id, callType);
   };
 
+  // Header'da yer kalmayan aksiyonlar tek taşma menüsünde toplanır.
+  const menuItems: ChatHeaderMenuItem[] = [];
+  if (showChatSearch && onSearchPress) {
+    menuItems.push({
+      key: 'search',
+      label: 'Mesajlarda ara',
+      icon: 'search-outline',
+      onPress: onSearchPress,
+    });
+  }
+  if (showChatGallery && onGalleryPress) {
+    menuItems.push({
+      key: 'gallery',
+      label: 'Medya ve galeri',
+      icon: 'images-outline',
+      onPress: onGalleryPress,
+    });
+  }
+  if (onWallpaperPress) {
+    menuItems.push({
+      key: 'wallpaper',
+      label: 'Duvar kağıdı',
+      description: 'Arka plan ve baloncuk rengi',
+      icon: 'color-palette-outline',
+      onPress: onWallpaperPress,
+    });
+  }
+  if (isGroup && showGroupInfo) {
+    menuItems.push({
+      key: 'group-info',
+      label: 'Grup bilgisi',
+      icon: 'information-circle-outline',
+      onPress: handleHeaderPress,
+    });
+  }
+  if (onMenuPress && showChatMenu) {
+    menuItems.push({
+      key: 'actions',
+      label: 'Sohbet işlemleri',
+      description: 'Geçmişi temizle, sil, engelle',
+      icon: 'ellipsis-horizontal-circle-outline',
+      onPress: onMenuPress,
+    });
+  }
+
+  if (tipRecipient && tipAllowed) {
+    menuItems.push({
+      key: 'tip',
+      label: 'Bahşiş gönder',
+      description: 'Gönüllü destek',
+      icon: 'gift-outline',
+      tint: TIP_ACCENT,
+      onPress: () => setTipOpen(true),
+    });
+  }
+
+  const hasMenu = menuItems.length > 0;
+
   return (
     <>
-      <View style={[styles.shell, { backgroundColor: chat.screenBg }]}>
-        <Pressable style={styles.back} onPress={() => router.back()} hitSlop={6}>
+      <View
+        style={[
+          styles.shell,
+          {
+            backgroundColor: transparent ? 'transparent' : chat.headerBg,
+            borderBottomColor: transparent ? 'transparent' : chat.headerBorder,
+            borderBottomWidth: transparent ? 0 : StyleSheet.hairlineWidth,
+          },
+        ]}
+      >
+        <Pressable style={styles.back} onPress={() => router.back()} hitSlop={4}>
           <Ionicons name="chevron-back" size={26} color={colors.text} />
         </Pressable>
 
@@ -177,40 +266,50 @@ export function ChatHeader({
         </Pressable>
 
         <View style={styles.actions}>
-          <HeaderAction
-            icon="search-outline"
-            color={colors.textSecondary}
-            onPress={showChatSearch ? onSearchPress : undefined}
-          />
-          <HeaderAction
-            icon="images-outline"
-            color={colors.textSecondary}
-            onPress={showChatGallery ? onGalleryPress : undefined}
-          />
           {!isGroup && conversation.otherUser && !hideCalls ? (
             <>
               <HeaderAction
                 icon="call-outline"
                 color={colors.primary}
+                accessibilityLabel="Sesli ara"
                 onPress={showAudioCall ? () => handleCall('audio') : undefined}
               />
               <HeaderAction
                 icon="videocam-outline"
                 color={colors.accent}
+                accessibilityLabel="Görüntülü ara"
                 onPress={showVideoCall ? () => handleCall('video') : undefined}
               />
             </>
           ) : null}
-          {isGroup && showGroupInfo ? (
-            <HeaderAction icon="information-circle-outline" color={colors.primary} onPress={handleHeaderPress} />
+          {hasMenu ? (
+            <HeaderAction
+              icon="ellipsis-vertical"
+              color={colors.textSecondary}
+              accessibilityLabel="Sohbet menüsü"
+              onPress={() => setMenuOpen(true)}
+            />
           ) : null}
-          <HeaderAction
-            icon="ellipsis-vertical"
-            color={colors.textSecondary}
-            onPress={showChatMenu ? onMenuPress : undefined}
-          />
         </View>
       </View>
+
+      <ChatHeaderMenuSheet
+        visible={menuOpen}
+        title={title}
+        items={menuItems}
+        onClose={() => setMenuOpen(false)}
+      />
+      {tipRecipient && tipAllowed ? (
+        <TipSheet
+          visible={tipOpen}
+          onClose={() => setTipOpen(false)}
+          recipientId={tipRecipient.id}
+          recipientName={displayParticipantName(tipRecipient)}
+          surface="message"
+          contextId={conversation.id}
+          returnPath={`chat/${conversation.id}`}
+        />
+      ) : null}
       <PremiumCallGateSheet visible={gateVisible} callType={gateCallType} onClose={closeGate} />
     </>
   );
@@ -222,11 +321,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: spacing.xs,
-    gap: 2,
   },
   back: {
-    width: 36,
-    height: TOOLBAR_HEIGHT,
+    width: ACTION_SIZE,
+    height: ACTION_SIZE,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -234,8 +332,9 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
+    gap: spacing.sm + 2,
     minWidth: 0,
+    paddingRight: spacing.xs,
   },
   avatar: {
     width: AVATAR_SIZE,
@@ -258,11 +357,13 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 16,
     fontWeight: '700',
+    flexShrink: 1,
   },
   nameRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+    minWidth: 0,
   },
   subtitleRow: {
     flexDirection: 'row',
@@ -278,11 +379,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     flexShrink: 0,
+    gap: 2,
   },
   iconBtn: {
-    width: 36,
-    height: TOOLBAR_HEIGHT,
+    width: ACTION_SIZE,
+    height: ACTION_SIZE,
+    borderRadius: ACTION_SIZE / 2,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  iconBtnPressed: {
+    opacity: 0.6,
   },
 });

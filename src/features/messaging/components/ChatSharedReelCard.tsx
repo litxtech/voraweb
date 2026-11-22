@@ -4,6 +4,7 @@ import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Text } from '@/components/ui/Text';
 import { radius, spacing } from '@/constants/theme';
+import { shouldSkipUiBlur } from '@/lib/device/androidPerfProfile';
 import { getMuxThumbnailUrl, extractMuxPlaybackId } from '@/lib/mux/client';
 import { CHAT_REEL_SHARE_ASPECT, CHAT_REEL_SHARE_WIDTH } from '../constants';
 import { openReelsAtReel } from '@/features/reels/services/reelsNavigation';
@@ -82,7 +83,14 @@ export function ChatSharedReelCard({ message, textColor, metaColor }: ChatShared
         )}
         {isRemoved ? (
           <>
-            <BlurView intensity={28} tint="dark" style={StyleSheet.absoluteFill} pointerEvents="none" />
+            {shouldSkipUiBlur() ? (
+              <View
+                style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(8,10,14,0.72)' }]}
+                pointerEvents="none"
+              />
+            ) : (
+              <BlurView intensity={28} tint="dark" style={StyleSheet.absoluteFill} pointerEvents="none" />
+            )}
             <View style={styles.removedOverlay} pointerEvents="none">
               <Ionicons name="snow-outline" size={28} color="rgba(255,255,255,0.92)" />
               <Text variant="caption" style={styles.removedLabel}>
@@ -141,7 +149,7 @@ const styles = StyleSheet.create({
     opacity: 0.45,
   },
   removedOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.xs,

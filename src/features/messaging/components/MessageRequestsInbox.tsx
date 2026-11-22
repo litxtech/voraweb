@@ -4,11 +4,11 @@ import { Text } from '@/components/ui/Text';
 import { spacing } from '@/constants/theme';
 import { useAuth } from '@/providers/AuthProvider';
 import { fetchRestrictedUserIds } from '@/features/moderation/services/relationships';
-import { getAndroidFlatListPerfProps } from '@/lib/device/androidPerfProfile';
+import { getListPerfProps } from '@/lib/device/androidPerfProfile';
 import { useConversationList } from '../hooks/useConversationList';
 import { openChat } from '../services/messagingNavigation';
 import type { ConversationListItem } from '../types';
-import { ConversationRow } from './ConversationRow';
+import { ConversationRow, CONVERSATION_AVATAR_SIZE } from './ConversationRow';
 
 type RequestRowProps = {
   item: ConversationListItem;
@@ -53,6 +53,11 @@ export function MessageRequestsInbox() {
 
   const keyExtractor = useCallback((item: ConversationListItem) => item.id, []);
 
+  const renderSeparator = useCallback(
+    () => <View style={styles.separator} />,
+    [],
+  );
+
   return (
     <View style={styles.container}>
       <Text secondary variant="caption" style={styles.hint}>
@@ -64,10 +69,11 @@ export function MessageRequestsInbox() {
         data={requests}
         keyExtractor={keyExtractor}
         renderItem={renderItem}
+        ItemSeparatorComponent={renderSeparator}
         contentContainerStyle={styles.list}
         refreshing={false}
         onRefresh={refresh}
-        {...getAndroidFlatListPerfProps()}
+        {...getListPerfProps()}
         ListEmptyComponent={
           ready ? (
             <Text secondary style={styles.empty}>
@@ -84,6 +90,11 @@ const styles = StyleSheet.create({
   container: { flex: 1, minHeight: 0, gap: spacing.sm },
   listFlex: { flex: 1 },
   hint: { paddingHorizontal: spacing.xs },
-  list: { gap: spacing.sm, paddingBottom: spacing.xl },
+  list: { gap: 0, paddingBottom: spacing.xl },
+  separator: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: 'rgba(128,128,128,0.22)',
+    marginLeft: spacing.md + CONVERSATION_AVATAR_SIZE + 12,
+  },
   empty: { textAlign: 'center', marginTop: spacing.xl, paddingHorizontal: spacing.lg },
 });

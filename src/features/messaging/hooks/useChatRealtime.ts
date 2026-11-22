@@ -196,9 +196,24 @@ export function useChatRealtime({
     void subscribe();
 
     const appStateSub = AppState.addEventListener('change', (state: AppStateStatus) => {
-      if (state === 'active' && !cancelled) {
+      if (cancelled) return;
+
+      if (state === 'active') {
+        // Arka planda kanal kapatılmıştı — yeniden abone ol ve kaçanları çek.
+        if (!channelRef.current) void subscribe();
         onSubscribedRef.current?.();
+        return;
       }
+
+      // Arka plan: websocket join/heartbeat + INSERT trafiği boşa gidiyordu.
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+      }
+      subscribeSeqRef.current += 1;
+      const channel = channelRef.current;
+      channelRef.current = null;
+      if (channel) void supabase.removeChannel(channel);
     });
 
     const {

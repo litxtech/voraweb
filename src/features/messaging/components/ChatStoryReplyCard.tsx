@@ -1,3 +1,4 @@
+import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -7,6 +8,7 @@ import { parseStoryReplyMetadata } from '@/features/messaging/services/storyRepl
 import { resolveStoryThumbUrl } from '@/features/stories/services/storyMediaUrl';
 import { radius, spacing } from '@/constants/theme';
 import type { ChatMessage } from '../types';
+import { StoryReplyMediaViewer } from './StoryReplyMediaViewer';
 
 const STORY_REPLY_ASPECT = 9 / 16;
 
@@ -25,8 +27,12 @@ export function ChatStoryReplyCard({
   metaColor,
   bubbleBackground,
 }: ChatStoryReplyCardProps) {
-  const meta = parseStoryReplyMetadata(message.metadata);
+  const meta = useMemo(
+    () => parseStoryReplyMetadata(message.metadata),
+    [message.metadata],
+  );
   const { width: screenWidth } = useWindowDimensions();
+  const [viewerOpen, setViewerOpen] = useState(false);
   const cardWidth = Math.min(220, screenWidth * 0.58);
   const mediaHeight = cardWidth / STORY_REPLY_ASPECT;
 
@@ -48,7 +54,18 @@ export function ChatStoryReplyCard({
         </Text>
       </View>
 
-      <View style={[styles.mediaFrame, { width: cardWidth, height: mediaHeight }]}>
+      <Pressable
+        onPress={() => setViewerOpen(true)}
+        accessibilityRole="imagebutton"
+        accessibilityLabel={
+          meta.storyMediaType === 'video' ? 'Hikâye videosunu tam ekran aç' : 'Hikâyeyi tam ekran aç'
+        }
+        style={({ pressed }) => [
+          styles.mediaFrame,
+          { width: cardWidth, height: mediaHeight },
+          pressed && styles.mediaPressed,
+        ]}
+      >
         {thumbUrl ? (
           <OptimizedImage uri={thumbUrl} tier="feed" style={styles.thumb} contentFit="cover" recyclingKey={meta.storyItemId} />
         ) : (
@@ -61,7 +78,14 @@ export function ChatStoryReplyCard({
             <Ionicons name="play" size={16} color="#fff" />
           </View>
         ) : null}
-      </View>
+        <View style={styles.expandBadge}>
+          <Ionicons name="expand-outline" size={13} color="#fff" />
+        </View>
+      </Pressable>
+
+      {viewerOpen ? (
+        <StoryReplyMediaViewer meta={meta} onClose={() => setViewerOpen(false)} />
+      ) : null}
 
       {message.content.trim() ? (
         <Text variant="body" style={{ color: textColor, paddingHorizontal: spacing.sm, paddingBottom: spacing.sm }}>
@@ -103,6 +127,9 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: 'rgba(255,255,255,0.12)',
   },
+  mediaPressed: {
+    opacity: 0.9,
+  },
   thumb: {
     width: '100%',
     height: '100%',
@@ -125,5 +152,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingLeft: 2,
+  },
+  expandBadge: {
+    position: 'absolute',
+    right: 6,
+    bottom: 6,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

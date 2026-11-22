@@ -19,7 +19,9 @@ export function useUserPresence(userId: string | null | undefined) {
 
       if (state === 'active') {
         void setUserOnline(id);
-      } else if (state === 'background') {
+      } else if (state === 'background' || state === 'inactive') {
+        // iOS'ta kontrol merkezi / app switcher `inactive` verir; 2 dakikalık
+        // presence upsert'i orada da sürüyordu. İkisinde de kalp atışını durdur.
         void setUserOffline(id);
       }
     };

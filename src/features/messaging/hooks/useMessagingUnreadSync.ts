@@ -14,23 +14,65 @@ import { subscribeInboxRealtime } from '../services/inboxRealtime';
 import { useMessagingStore } from '../store/messagingStore';
 import { messagePreviewFromRow, type IncomingMessageRow } from '../utils/inboxUpdates';
 
+type SenderProfileRow = { full_name: string | null; username: string | null; avatar_url: string | null };
+type ConversationMetaRow = { type: string | null; title: string | null };
+
+const META_TTL_MS = 5 * 60 * 1000;
+const META_CACHE_MAX = 300;
+const senderCache = new Map<string, { at: number; row: SenderProfileRow | null }>();
+const conversationCache = new Map<string, { at: number; row: ConversationMetaRow | null }>();
+
+function trimMetaCache<T>(cache: Map<string, { at: number; row: T }>): void {
+  if (cache.size <= META_CACHE_MAX) return;
+  const oldest = cache.keys().next();
+  if (!oldest.done) cache.delete(oldest.value);
+}
+
+/**
+ * Gelen her mesaj için 2 ayrı profil/konuşma sorgusu atılıyordu. Gönderen adı ve
+ * grup başlığı nadiren değişir — kısa TTL'li önbellek sorguları tekilleştirir.
+ */
+async function loadSenderProfile(userId: string): Promise<SenderProfileRow | null> {
+  const cached = senderCache.get(userId);
+  if (cached && Date.now() - cached.at < META_TTL_MS) return cached.row;
+
+  const { data } = await supabase
+    .from('profiles')
+    .select('full_name, username, avatar_url')
+    .eq('id', userId)
+    .maybeSingle();
+
+  const row = (data as SenderProfileRow | null) ?? null;
+  senderCache.set(userId, { at: Date.now(), row });
+  trimMetaCache(senderCache);
+  return row;
+}
+
+async function loadConversationMeta(conversationId: string): Promise<ConversationMetaRow | null> {
+  const cached = conversationCache.get(conversationId);
+  if (cached && Date.now() - cached.at < META_TTL_MS) return cached.row;
+
+  const { data } = await supabase
+    .from('conversations')
+    .select('type, title')
+    .eq('id', conversationId)
+    .maybeSingle();
+
+  const row = (data as ConversationMetaRow | null) ?? null;
+  conversationCache.set(conversationId, { at: Date.now(), row });
+  trimMetaCache(conversationCache);
+  return row;
+}
+
 async function resolveMessageNotificationTitle(row: IncomingMessageRow): Promise<{
   title: string;
   senderName: string;
   isGroup: boolean;
   avatarUrl: string | null;
 }> {
-  const [{ data: profile }, { data: conversation }] = await Promise.all([
-    supabase
-      .from('profiles')
-      .select('full_name, username, avatar_url')
-      .eq('id', row.sender_id)
-      .maybeSingle(),
-    supabase
-      .from('conversations')
-      .select('type, title')
-      .eq('id', row.conversation_id)
-      .maybeSingle(),
+  const [profile, conversation] = await Promise.all([
+    loadSenderProfile(row.sender_id),
+    loadConversationMeta(row.conversation_id),
   ]);
 
   const isGroup = conversation?.type === 'group';
@@ -84,8 +126,10 @@ export function useMessagingUnreadSync() {
   const scheduleRefresh = useCallback(() => {
     if (refreshTimer.current) clearTimeout(refreshTimer.current);
     refreshTimer.current = setTimeout(() => {
+      // Arka planda tam konuşma listesi çekmenin faydası yok.
+      if (AppState.currentState !== 'active') return;
       void syncFromServerRef.current();
-    }, 600);
+    }, 900);
   }, []);
 
   const handleIncomingMessage = useCallback(

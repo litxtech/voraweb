@@ -17,7 +17,6 @@ import {
   type IncomingMessageRow,
 } from '../utils/inboxUpdates';
 import {
-  resolveSilentRefreshDebounceMs,
   shouldUseSilentListRefresh,
 } from '@/lib/ui/listRefresh';
 import {
@@ -56,10 +55,11 @@ export function useConversationList(enabled = true, archivedOnly = false) {
   const [error, setError] = useState<string | null>(null);
   const activeConversationId = useMessagingStore((s) => s.activeConversationId);
   const setUnreadFromConversations = useMessagingStore((s) => s.setUnreadFromConversations);
-  const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const activeConversationIdRef = useRef(activeConversationId);
   const conversationsRef = useRef(conversations);
   const seenScopeRef = useRef(scopeKey);
+  const realtimeRefreshInFlightRef = useRef(false);
+  const realtimeRefreshQueuedRef = useRef(false);
   activeConversationIdRef.current = activeConversationId;
   conversationsRef.current = conversations;
 
@@ -111,16 +111,27 @@ export function useConversationList(enabled = true, archivedOnly = false) {
   const refreshRef = useRef(refresh);
   refreshRef.current = refresh;
 
-  const scheduleSilentRefresh = useCallback(() => {
-    if (refreshTimer.current) clearTimeout(refreshTimer.current);
-    refreshTimer.current = setTimeout(() => {
-      void refreshRef.current(true);
-    }, resolveSilentRefreshDebounceMs(600));
+  const runRealtimeRefresh = useCallback(async () => {
+    if (realtimeRefreshInFlightRef.current) {
+      realtimeRefreshQueuedRef.current = true;
+      return;
+    }
+    realtimeRefreshInFlightRef.current = true;
+    try {
+      await refreshRef.current(true);
+    } finally {
+      realtimeRefreshInFlightRef.current = false;
+      if (realtimeRefreshQueuedRef.current) {
+        realtimeRefreshQueuedRef.current = false;
+        void runRealtimeRefresh();
+      }
+    }
   }, []);
 
   const handleIncomingMessage = useCallback(
     (row: IncomingMessageRow) => {
       let needsFullRefresh = false;
+      let nextList: ConversationListItem[] | null = null;
 
       setConversations((prev) => {
         const result = applyIncomingMessageToConversationList(
@@ -130,21 +141,26 @@ export function useConversationList(enabled = true, archivedOnly = false) {
           activeConversationIdRef.current,
         );
         needsFullRefresh = result.needsFullRefresh;
+        nextList = result.list;
         return result.list;
       });
 
+      if (nextList && userId) {
+        setCachedConversationList(userId, archivedOnly, nextList);
+        if (!archivedOnly) {
+          setUnreadFromConversations(nextList);
+        }
+      }
+
       if (needsFullRefresh) {
-        void refreshRef.current(true);
+        void runRealtimeRefresh();
       }
     },
-    [userId],
+    [archivedOnly, runRealtimeRefresh, setUnreadFromConversations, userId],
   );
 
   const handleIncomingMessageRef = useRef(handleIncomingMessage);
   handleIncomingMessageRef.current = handleIncomingMessage;
-
-  const scheduleSilentRefreshRef = useRef(scheduleSilentRefresh);
-  scheduleSilentRefreshRef.current = scheduleSilentRefresh;
 
   useEffect(() => {
     if (!userId) {
@@ -217,28 +233,40 @@ export function useConversationList(enabled = true, archivedOnly = false) {
 
     return subscribeInboxRealtime(userId, {
       onMessage: (row) => {
+        // Yerel birleştirme (`applyIncomingMessageToConversationList`) zaten
+        // önizleme/sıralamayı günceller ve gerekirse kendi içinde tam yenileme
+        // tetikler. Buradaki koşulsuz tam liste çekimi her mesajda 1-2 fazla
+        // RPC demekti.
         handleIncomingMessageRef.current(row);
-        scheduleSilentRefreshRef.current();
       },
       onConversationUpdate: (row) => {
-        setConversations((prev) =>
-          applyConversationPreviewUpdate(
+        let nextList: ConversationListItem[] | null = null;
+        setConversations((prev) => {
+          const updated = applyConversationPreviewUpdate(
             prev,
             row.id,
             row.last_message_at,
             row.last_message_preview,
-          ),
-        );
+          );
+          nextList = updated;
+          return updated;
+        });
+        if (nextList) {
+          setCachedConversationList(userId, archivedOnly, nextList);
+          if (!archivedOnly) {
+            setUnreadFromConversations(nextList);
+          }
+        }
+        // Sadece listede olmayan (yeni) konuşma için tam yenileme gerekir.
+        if (!conversationsRef.current.some((item) => item.id === row.id)) {
+          void runRealtimeRefresh();
+        }
+      },
+      onMemberUpdate: () => {
+        void runRealtimeRefresh();
       },
     });
-  }, [enabled, userId]);
-
-  useEffect(
-    () => () => {
-      if (refreshTimer.current) clearTimeout(refreshTimer.current);
-    },
-    [],
-  );
+  }, [archivedOnly, enabled, runRealtimeRefresh, setUnreadFromConversations, userId]);
 
   const refreshPublic = useCallback(() => refresh(false), [refresh]);
   const refreshSilentPublic = useCallback(() => refresh(true), [refresh]);

@@ -8,7 +8,7 @@ import { useAuth } from '@/providers/AuthProvider';
 import { useRequireAuth } from '@/features/auth/hooks/useRequireAuth';
 import { radius, spacing } from '@/constants/theme';
 import { useTheme } from '@/providers/ThemeProvider';
-import { getAndroidFlatListPerfProps } from '@/lib/device/androidPerfProfile';
+import { getListPerfProps } from '@/lib/device/androidPerfProfile';
 import { fetchFriends, getOrCreateDirectConversation } from '../services/conversationData';
 
 export function FriendsList() {
@@ -77,7 +77,7 @@ export function FriendsList() {
       renderItem={renderItem}
       contentContainerStyle={styles.list}
       showsVerticalScrollIndicator={false}
-      {...getAndroidFlatListPerfProps()}
+      {...getListPerfProps()}
     />
   );
 }

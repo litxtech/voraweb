@@ -7,7 +7,7 @@ import type { CallParticipant } from '@/features/calls/types';
 import { useAuth } from '@/providers/AuthProvider';
 import { radius, spacing } from '@/constants/theme';
 import { useTheme } from '@/providers/ThemeProvider';
-import { getAndroidFlatListPerfProps } from '@/lib/device/androidPerfProfile';
+import { getListPerfProps } from '@/lib/device/androidPerfProfile';
 import { fetchCallHistory } from '../services/conversationData';
 import type { CallHistoryItem } from '../types';
 import { formatCallDuration, formatMessageTime } from '../utils';
@@ -101,7 +101,7 @@ export function CallHistoryList() {
       renderItem={renderItem}
       contentContainerStyle={styles.list}
       showsVerticalScrollIndicator={false}
-      {...getAndroidFlatListPerfProps()}
+      {...getListPerfProps()}
     />
   );
 }
