@@ -4,7 +4,6 @@ import {
   Alert,
   Modal,
   Pressable,
-  ScrollView,
   StyleSheet,
   TextInput,
   View,
@@ -12,9 +11,18 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import Animated, {
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Text } from '@/components/ui/Text';
+import { FormKeyboardScrollView } from '@/components/keyboard/FormKeyboardScrollView';
 import { radius, spacing } from '@/constants/theme';
 import { useTheme } from '@/providers/ThemeProvider';
 import {
@@ -62,6 +70,11 @@ const FALLBACK_SETTINGS: TipPublicSettings = {
   paymentsEnabled: true,
 };
 
+/** Aşağı sürükleme ile kapatma eşikleri. */
+const DISMISS_DRAG_PX = 90;
+const DISMISS_VELOCITY = 700;
+const SHEET_SPRING = { damping: 22, stiffness: 260, mass: 0.6 };
+
 /**
  * Tüm bölümlerde kullanılan ortak bahşiş tutarı seçme sayfası. Tutar ve
  * komisyon istemcide hesaplanmaz; Stripe Checkout sunucuda oluşturulur.
@@ -80,6 +93,9 @@ export function TipSheet({
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
+  /** Sayfa aşağı sürüklenirken kullanılan dikey kaydırma değeri. */
+  const translateY = useSharedValue(0);
+
   const [settings, setSettings] = useState<TipPublicSettings>(FALLBACK_SETTINGS);
   const [selected, setSelected] = useState<number | null>(null);
   const [custom, setCustom] = useState('');
@@ -96,6 +112,11 @@ export function TipSheet({
       cancelled = true;
     };
   }, [visible]);
+
+  // Kart her açılışta sürüklenmemiş konuma dönsün.
+  useEffect(() => {
+    if (visible) translateY.value = withTiming(0, { duration: 160 });
+  }, [visible, translateY]);
 
   const presets = useMemo(
     () => (settings.presetsMinor.length > 0 ? settings.presetsMinor.slice(0, 4) : [...TIP_PRESETS_MINOR]),
@@ -128,6 +149,46 @@ export function TipSheet({
     reset();
     onClose();
   }, [busy, onClose, reset]);
+
+  /** Aşağı kaydırma sonrası kartı ekranın dışına taşıyıp kapatır. */
+  const animateClose = useCallback(() => {
+    if (busy) {
+      translateY.value = withSpring(0, SHEET_SPRING);
+      return;
+    }
+    translateY.value = withTiming(1200, { duration: 180 }, (finished) => {
+      if (finished) runOnJS(handleClose)();
+    });
+  }, [busy, handleClose, translateY]);
+
+  const dragGesture = useMemo(
+    () =>
+      Gesture.Pan()
+        .activeOffsetY(6)
+        .failOffsetX([-32, 32])
+        .onUpdate((event) => {
+          'worklet';
+          if (busy) return;
+          translateY.value = Math.max(0, event.translationY);
+        })
+        .onEnd((event) => {
+          'worklet';
+          if (busy) {
+            translateY.value = withSpring(0, SHEET_SPRING);
+            return;
+          }
+          if (event.translationY > DISMISS_DRAG_PX || event.velocityY > DISMISS_VELOCITY) {
+            runOnJS(animateClose)();
+            return;
+          }
+          translateY.value = withSpring(0, SHEET_SPRING);
+        }),
+    [animateClose, busy, translateY],
+  );
+
+  const sheetAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: translateY.value }],
+  }));
 
   const handleContinue = useCallback(async () => {
     if (!settings.paymentsEnabled) {
@@ -210,29 +271,55 @@ export function TipSheet({
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
       <KeyboardAvoidingView style={styles.overlay} behavior="padding">
-        <Pressable style={styles.backdrop} onPress={handleClose} />
         <Pressable
+          style={styles.backdrop}
+          onPress={animateClose}
+          accessibilityRole="button"
+          accessibilityLabel="Bahşiş kartını kapat"
+        />
+        <Animated.View
           style={[
             styles.sheet,
             {
               backgroundColor: sheetBackground,
               paddingBottom: insets.bottom + spacing.md,
             },
+            sheetAnimatedStyle,
           ]}
-          onPress={(event) => event.stopPropagation()}
         >
-          <View style={[styles.handle, { backgroundColor: colors.border }]} />
-          <ScrollView
+          <GestureDetector gesture={dragGesture}>
+            <View style={styles.sheetHeader} accessibilityLabel="Aşağı kaydırarak kapat">
+              <View style={[styles.handle, { backgroundColor: colors.border }]} />
+              <View style={styles.headerRow}>
+                <Text variant="h3" style={styles.headerTitle}>
+                  Bahşiş gönder
+                </Text>
+                <Pressable
+                  onPress={animateClose}
+                  disabled={busy}
+                  hitSlop={12}
+                  accessibilityRole="button"
+                  accessibilityLabel="Kapat"
+                  style={({ pressed }) => [
+                    styles.closeBtn,
+                    { backgroundColor: colors.surface, borderColor: colors.border },
+                    pressed && styles.closeBtnPressed,
+                  ]}
+                >
+                  <Ionicons name="close" size={16} color={colors.text} />
+                </Pressable>
+              </View>
+              <Text variant="caption" muted numberOfLines={2}>
+                {recipientName} · Ödemen Stripe üzerinden güvenli şekilde alınır.
+              </Text>
+            </View>
+          </GestureDetector>
+          <FormKeyboardScrollView
             style={styles.sheetScroll}
             contentContainerStyle={styles.sheetContent}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
-            >
-            <Text variant="h3">Bahşiş gönder</Text>
-            <Text variant="caption" muted>
-              {recipientName} · Ödemen Stripe üzerinden güvenli şekilde alınır.
-            </Text>
-
+          >
             <View style={styles.grid}>
               {presets.map((preset) => {
                 const active = !customMode && selected === preset;
@@ -339,8 +426,8 @@ export function TipSheet({
             <Text variant="caption" muted style={styles.finePrint}>
               Bahşişler gönüllü desteklerdir. İade ve itiraz durumları muhasebe kayıtlarına yansıtılır.
             </Text>
-          </ScrollView>
-        </Pressable>
+          </FormKeyboardScrollView>
+        </Animated.View>
       </KeyboardAvoidingView>
     </Modal>
   );
@@ -348,16 +435,35 @@ export function TipSheet({
 
 const styles = StyleSheet.create({
   overlay: { flex: 1, justifyContent: 'flex-end' },
-  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.55)' },
+  backdrop: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(0,0,0,0.55)' },
   sheet: {
     borderTopLeftRadius: radius.xl,
     borderTopRightRadius: radius.xl,
     paddingTop: spacing.lg,
     paddingHorizontal: spacing.lg,
-    maxHeight: '100%',
+    // Arka plan her zaman dokunulabilir kalsın (kart tam ekranı kaplamasın).
+    maxHeight: '92%',
+    overflow: 'hidden',
   },
   sheetScroll: { flexShrink: 1 },
   sheetContent: { gap: spacing.sm, paddingBottom: spacing.sm },
+  sheetHeader: { paddingBottom: spacing.xs, gap: spacing.xs },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.xs,
+  },
+  headerTitle: { flex: 1 },
+  closeBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  closeBtnPressed: { opacity: 0.65 },
   handle: {
     alignSelf: 'center',
     width: 42,
