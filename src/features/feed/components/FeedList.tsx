@@ -11,6 +11,10 @@ import { FeedEventCard } from '@/features/feed/components/FeedEventCard';
 import { FeedJobCard } from '@/features/feed/components/FeedJobCard';
 import { FeedLostItemCard } from '@/features/feed/components/FeedLostItemCard';
 import { FeedEmptyState } from '@/features/feed/components/shared/FeedEmptyState';
+import { FeedScreenShareCard } from '@/features/screen-share/components/FeedScreenShareCard';
+import { FeedVideoPromoCard } from '@/features/feed/components/FeedVideoPromoCard';
+import { AdMobBanner, ADMOB_FEATURE, ADMOB_FEED_SLOT_AFTER_ITEMS } from '@/features/admob';
+import { useFeatureFlags } from '@/providers/FeatureFlagsProvider';
 import { useFeedVideoPlaybackStore } from '@/features/feed/store/feedVideoPlaybackStore';
 import { useFeedRowVisibilityStore } from '@/features/feed/store/feedRowVisibilityStore';
 import { useFeedDrawerStore } from '@/features/feed/store/feedDrawerStore';
@@ -19,6 +23,10 @@ import { spacing } from '@/constants/theme';
 import { getFeedListPerfProps, getFeedFlashListDrawDistance, getFeedScrollSettleMs, isAndroid, shouldAutoplayFeedVideos } from '@/lib/device/androidPerfProfile';
 import { shouldUseSilentListRefresh } from '@/lib/ui/listRefresh';
 import { isVideoUrl } from '@/lib/media/isVideoUrl';
+import {
+  prefetchFeedMediaHead,
+  prefetchFeedMediaWindow,
+} from '@/features/feed/services/feedMediaPrefetch';
 import { useTheme } from '@/providers/ThemeProvider';
 
 /** Akış sohbet değil — MVCP açıkken yukarı kaydırma, ölçülen kartlara karşı ofset düzeltip titretir. */
@@ -68,6 +76,10 @@ const FeedPostRow = memo(function FeedPostRow({
     [item.id, onRemoveItem],
   );
 
+  if (item.sourceType === 'video_promo') {
+    return <FeedVideoPromoCard item={item} isVisible={isRowVisible} />;
+  }
+
   if (item.sourceType === 'business_ad') {
     return (
       <FeedSponsoredAdCard
@@ -76,6 +88,10 @@ const FeedPostRow = memo(function FeedPostRow({
         onUpdate={onUpdate}
       />
     );
+  }
+
+  if (item.sourceType === 'screen_share') {
+    return <FeedScreenShareCard item={item} />;
   }
 
   return item.sourceType === 'event' ? (
@@ -128,6 +144,21 @@ function collectVisibleIds(viewableItems: ViewToken[]): Set<string> {
   return nextVisible;
 }
 
+function collectVisibleIndexRange(
+  viewableItems: ViewToken[],
+): { min: number; max: number } | null {
+  let min = Number.MAX_SAFE_INTEGER;
+  let max = -1;
+  for (const token of viewableItems) {
+    if (!token.isViewable || !token.item) continue;
+    const index = token.index;
+    if (index == null || index < 0) continue;
+    if (index < min) min = index;
+    if (index > max) max = index;
+  }
+  return max >= 0 ? { min, max } : null;
+}
+
 export function FeedList({
   items,
   loading,
@@ -144,11 +175,16 @@ export function FeedList({
   listBottomInset = 0,
 }: FeedListProps) {
   const { colors } = useTheme();
+  const { isVisible } = useFeatureFlags();
+  const showFeedAdMobBanner = isVisible(ADMOB_FEATURE.feedBanner);
   const showInitialEmpty = !loading && items.length === 0;
   const listPerf = useMemo(() => getFeedListPerfProps(), []);
   const drawDistance = useMemo(() => getFeedFlashListDrawDistance(), []);
   const listRef = useRef<FlatList<FeedItem> | FlashListRef<FeedItem>>(null);
   useScrollToTop(listRef);
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
+  const prefetchedHeadIdRef = useRef<string | null>(null);
   const scrollSettleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingViewableRef = useRef<ViewToken[]>([]);
   const commitActiveVideoRef = useRef<(viewableItems: ViewToken[]) => void>(() => {});
@@ -168,6 +204,13 @@ export function FeedList({
   commitActiveVideoRef.current = commitActiveVideo;
 
   const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: ViewToken[] }) => {
+    // Görünür alana girmeden önceki satırların medyasını ısıt: hücre geri
+    // dönüşümünde siyah/gri kart kalmasın, yükseklik de ilk karede doğru olsun.
+    const indexRange = collectVisibleIndexRange(viewableItems);
+    if (indexRange) {
+      prefetchFeedMediaWindow(itemsRef.current, indexRange.min, indexRange.max);
+    }
+
     if (useFeedDrawerStore.getState().listInteractionLocked) return;
 
     const isScrolling = useFeedVideoPlaybackStore.getState().isScrolling;
@@ -223,6 +266,14 @@ export function FeedList({
     useFeedVideoPlaybackStore.getState().setScrolling(false);
   }, []);
 
+  // Liste ilk dolduğunda ilk satırların medyasını ısıt (viewability beklemeden).
+  useEffect(() => {
+    const headId = items[0]?.id ?? null;
+    if (!headId || prefetchedHeadIdRef.current === headId) return;
+    prefetchedHeadIdRef.current = headId;
+    prefetchFeedMediaHead(items, 5);
+  }, [items]);
+
   // Sekmeye geri dönünce son bilinen görünür satırlardan aktif videoyu yeniden seç.
   useEffect(() => {
     if (isScreenFocused === false) return;
@@ -231,6 +282,13 @@ export function FeedList({
   }, [isScreenFocused]);
 
   useEffect(() => {
+    /**
+     * Android'de liste FlashList; kendi geri dönüşümünü yönetiyor.
+     * `removeClippedSubviews` FlashList'e yazılınca hücreler kaydırma sırasında
+     * sökülüp yeniden bağlanıyor: hem görsel/video bir an siyah-gri kalıyor hem
+     * de satır yüksekliği oynayıp liste titriyor. FlatList'te davranış korunur.
+     */
+    const usesFlashList = isAndroid();
     const clipSubviews = listPerf.removeClippedSubviews ?? false;
 
     const applyListInteraction = (locked: boolean) => {
@@ -242,10 +300,13 @@ export function FeedList({
         commitActiveVideoRef.current(pendingViewableRef.current);
       }
 
-      listRef.current?.setNativeProps?.({
+      const nativeProps: { pointerEvents: 'none' | 'auto'; removeClippedSubviews?: boolean } = {
         pointerEvents: locked ? 'none' : 'auto',
-        removeClippedSubviews: locked ? false : clipSubviews,
-      });
+      };
+      if (!usesFlashList) {
+        nativeProps.removeClippedSubviews = locked ? false : clipSubviews;
+      }
+      listRef.current?.setNativeProps?.(nativeProps);
     };
 
     useFeedDrawerStore.getState().setListInteractionLockHandler(applyListInteraction);
@@ -257,16 +318,28 @@ export function FeedList({
   }, []);
 
   const renderItem = useCallback(
-    ({ item }: { item: FeedItem }) => (
-      <FeedPostRow
-        item={item}
-        isScreenFocused={isScreenFocused}
-        isRouteFocused={isRouteFocused}
-        onUpdateItem={onUpdateItem}
-        onRemoveItem={onRemoveItem}
-      />
-    ),
-    [isScreenFocused, isRouteFocused, onUpdateItem, onRemoveItem],
+    ({ item, index }: { item: FeedItem; index: number }) => {
+      const row = (
+        <FeedPostRow
+          item={item}
+          isScreenFocused={isScreenFocused}
+          isRouteFocused={isRouteFocused}
+          onUpdateItem={onUpdateItem}
+          onRemoveItem={onRemoveItem}
+        />
+      );
+
+      // İnce yatay AdMob şeridi: 2. gönderiden sonra, yalnızca admin açtıysa.
+      if (!showFeedAdMobBanner || index !== ADMOB_FEED_SLOT_AFTER_ITEMS) return row;
+
+      return (
+        <>
+          <AdMobBanner placement="feed" />
+          {row}
+        </>
+      );
+    },
+    [showFeedAdMobBanner, isScreenFocused, isRouteFocused, onUpdateItem, onRemoveItem],
   );
 
   const keyExtractor = useCallback((item: FeedItem) => item.id, []);

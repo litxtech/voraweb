@@ -1,7 +1,12 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Image as RnImage, LayoutChangeEvent, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { memo, useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
+import { LayoutChangeEvent, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import type { ImageContentFit, ImageLoadEventData } from 'expo-image';
 import { FEED_MEDIA_ASPECT_RATIO } from '@/features/feed/constants';
+import {
+  DEFAULT_FEED_INLINE_ASPECT,
+  readCachedFeedAspects,
+  rememberFeedAspectFromSize,
+} from '@/features/feed/services/feedMediaAspect';
 import { getFeedMediaMaxHeight } from '@/lib/device/androidPerfProfile';
 import { isVideoUrl } from '@/lib/media/isVideoUrl';
 import { FeedMediaPreview } from '@/components/media/FeedMediaPreview';
@@ -10,30 +15,22 @@ import { FeedInlineVideoSlide } from '@/features/feed/components/FeedInlineVideo
 import { radius, spacing } from '@/constants/theme';
 import { useTheme } from '@/providers/ThemeProvider';
 
-/** Genişlik / yükseklik — Instagram aralığı. */
-const MIN_INLINE_ASPECT = 4 / 5;
-const MAX_INLINE_ASPECT = 1.91;
-const DEFAULT_INLINE_ASPECT = 1;
+const DEFAULT_INLINE_ASPECT = DEFAULT_FEED_INLINE_ASPECT;
 const VIDEO_INLINE_ASPECT = 4 / 5;
 const SLIDE_WINDOW = 1;
-/** Akış kartı: yatay padding + satır boşluğu + avatar (40 + halka). İlk karede onLayout beklemeden yükseklik. */
-const FEED_INLINE_MEDIA_CHROME = spacing.md * 2 + spacing.sm + 44;
-
-const feedAspectCache = new Map<string, number>();
-
-function readCachedAspects(urls: string[]): Record<string, number> {
-  const seeded: Record<string, number> = {};
-  for (const url of urls) {
-    const cached = feedAspectCache.get(url);
-    if (cached != null) seeded[url] = cached;
-  }
-  return seeded;
-}
+/**
+ * Akış kartı: yalnızca yatay iç boşluk (kart padding'i).
+ * İlk karede onLayout beklemeden doğru yükseklik için tahmin birebir olmalı;
+ * eksik/fazla pay satır yüksekliğini mount sonrası değiştirip kaydırmada titretir.
+ */
+const DEFAULT_INLINE_HORIZONTAL_INSET = spacing.md * 2;
 
 type MediaCarouselProps = {
   urls: string[];
   variant?: 'inline' | 'fullBleed';
   maxHeight?: number;
+  /** Kartın yatay iç boşluğu toplamı (px). Tahmini yükseklik için kullanılır. */
+  horizontalInset?: number;
   onMediaPress?: (index: number) => void;
   onSlideIndexChange?: (index: number) => void;
   overlay?: ReactNode;
@@ -44,12 +41,6 @@ type MediaCarouselProps = {
   videoActive?: boolean;
   videoMuted?: boolean;
 };
-
-function clampFeedAspect(width: number, height: number): number {
-  if (width <= 0 || height <= 0) return DEFAULT_INLINE_ASPECT;
-  const aspect = width / height;
-  return Math.min(MAX_INLINE_ASPECT, Math.max(MIN_INLINE_ASPECT, aspect));
-}
 
 function shouldRenderSlide(activeIndex: number, slideIndex: number, total: number): boolean {
   if (total <= 3) return true;
@@ -62,6 +53,7 @@ export const MediaCarousel = memo(function MediaCarousel({
   urls,
   variant = 'inline',
   maxHeight = getFeedMediaMaxHeight(),
+  horizontalInset = DEFAULT_INLINE_HORIZONTAL_INSET,
   onMediaPress,
   onSlideIndexChange,
   overlay,
@@ -81,47 +73,24 @@ export const MediaCarousel = memo(function MediaCarousel({
   const indexRef = useRef(0);
   indexRef.current = index;
   const [measuredWidth, setMeasuredWidth] = useState(0);
-  const [aspectByUrl, setAspectByUrl] = useState<Record<string, number>>(() => readCachedAspects(urls));
   const [trackedUrlsKey, setTrackedUrlsKey] = useState(urlsKey);
 
   // Geri dönüşümde eski gönderinin oranı kalmasın; önbellek varsa ilk karede doğru yükseklik.
   if (trackedUrlsKey !== urlsKey) {
     setTrackedUrlsKey(urlsKey);
-    setAspectByUrl(readCachedAspects(urls));
     indexRef.current = 0;
     setIndex(0);
   }
 
-  const estimatedInlineWidth = Math.max(0, Math.round(screenWidth - FEED_INLINE_MEDIA_CHROME));
+  /**
+   * Oranlar yalnızca mount anında önbellekten okunur. Görsel yüklendikten sonra
+   * yükseklik değiştirmek (eski davranış) hücre boyutunu değiştirip kaydırmada
+   * titremeye yol açıyordu; yeni oran sadece sonraki mount'lar için önbelleğe yazılır.
+   */
+  const aspectByUrl = useMemo(() => readCachedFeedAspects(urls), [urlsKey]);
+
+  const estimatedInlineWidth = Math.max(0, Math.round(screenWidth - horizontalInset));
   const width = measuredWidth > 0 ? measuredWidth : isInline ? estimatedInlineWidth : 0;
-
-  const rememberAspect = useCallback((url: string, nextAspect: number) => {
-    feedAspectCache.set(url, nextAspect);
-    setAspectByUrl((prev) => {
-      if (prev[url] != null && Math.abs(prev[url] - nextAspect) < 0.01) return prev;
-      return { ...prev, [url]: nextAspect };
-    });
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    for (const url of urls) {
-      if (!url || isVideoUrl(url) || feedAspectCache.has(url)) continue;
-      RnImage.getSize(
-        url,
-        (w, h) => {
-          const aspect = clampFeedAspect(w, h);
-          feedAspectCache.set(url, aspect);
-          if (cancelled) return;
-          rememberAspect(url, aspect);
-        },
-        () => undefined,
-      );
-    }
-    return () => {
-      cancelled = true;
-    };
-  }, [urls, rememberAspect]);
 
   const activeUrl = urls[index] ?? urls[0] ?? '';
   const activeIsVideo = activeUrl ? isVideoUrl(activeUrl) : false;
@@ -181,14 +150,12 @@ export const MediaCarousel = memo(function MediaCarousel({
     [updateIndex, urls.length, width],
   );
 
-  const handleImageLoad = useCallback(
-    (url: string) => (event: ImageLoadEventData) => {
-      const source = event.source;
-      if (!source?.width || !source?.height) return;
-      rememberAspect(url, clampFeedAspect(source.width, source.height));
-    },
-    [rememberAspect],
-  );
+  const handleImageLoad = useCallback((url: string) => (event: ImageLoadEventData) => {
+    const source = event.source;
+    if (!source?.width || !source?.height) return;
+    // Sadece önbelleğe yaz — mount sonrası yükseklik değişirse liste titrer.
+    rememberFeedAspectFromSize(url, source.width, source.height);
+  }, []);
 
   if (urls.length === 0) return null;
 

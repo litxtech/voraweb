@@ -25,6 +25,7 @@ export function CanlarMediaGallery({
       <MediaCarousel
         urls={urls}
         variant={bleed ? 'fullBleed' : 'inline'}
+        horizontalInset={bleed ? 0 : undefined}
         maxHeight={bleed ? 520 : getFeedMediaMaxHeight()}
         inlineVideo={videoOn}
         videoMounted={videoOn}
